@@ -1,0 +1,11 @@
+{
+  "name": "nr-digital-studio-v2-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static website for NR Digital Studio V2, ready for Vercel hosting.",
+  "scripts": {
+    "dev": "python -m http.server 8080",
+    "build": "node build.js",
+    "start": "python -m http.server 8080"
+  }
+}
