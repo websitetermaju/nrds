@@ -33,51 +33,31 @@
 <div class="thank-wrap wrap">
   <div class="badge">Order Tercatat</div>
   <h1>Terima Kasih!</h1>
-  <p class="lead">Pesanan Pilah kamu sudah tercatat. Silakan bayar sesuai nominal di bawah, lalu upload bukti bayar.</p>
+  <p class="lead">Konfirmasi pembayaran kamu sudah diterima. Tim kami akan memverifikasi dalam <strong>1x24 jam</strong>.</p>
 
   <div class="order-summary" style="text-align:left">
     <dl>
-      <dt>Order ID</dt><dd>Menunggu nomor order dari sistem</dd>
-      <dt>Produk</dt><dd>Ditentukan saat checkout</dd>
-      <dt>Harga</dt><dd>Sesuai produk</dd>
-      <dt>Status</dt><dd style="color:var(--gold)">MENUNGGU_PEMBAYARAN</dd>
+      <dt>Order ID</dt><dd id="ty-order-id">Menunggu nomor order dari sistem</dd>
+      <dt>Produk</dt><dd id="ty-product">Ditentukan saat checkout</dd>
+      <dt>Harga</dt><dd id="ty-price">Sesuai produk</dd>
+      <dt>Status</dt><dd id="ty-status" style="color:var(--gold)">MENUNGGU_VERIFIKASI</dd>
     </dl>
   </div>
 
   <div class="pay-methods" style="text-align:left">
-    <h3>Bayar via QRIS</h3>
-    <img src="../../assets/pilah/qris-kios-adelin-checkout.png" alt="QR Code QRIS — Kios Adelin" class="qris-img" />
-    <div class="pay-instructions">
-      <ol style="padding-left:18px;margin:8px 0">
-        <li>Buka app bank atau e-wallet</li>
-        <li>Scan QR di atas</li>
-        <li>Bayar <strong>tepat sesuai nominal</strong> produk yang dipilih</li>
-      </ol>
+    <h3>Yang terjadi selanjutnya</h3>
+    <div class="steps">
+      <div class="step"><span class="step-num">1</span><p>Tim kami verifikasi bukti bayar &amp; mutasi</p></div>
+      <div class="step"><span class="step-num">2</span><p>Produk dikirim via email + link Google Drive</p></div>
+      <div class="step"><span class="step-num">3</span><p>Akses Discord support (untuk bundle)</p></div>
     </div>
-  </div>
-
-  <div class="pay-methods" style="text-align:left">
-    <h3>Bayar via DANA</h3>
-    <div class="pay-instructions">
-      <p>Nomor DANA: <strong>085770702292</strong> (Nurwanda Romadhon)</p>
-      <p>Masukkan nominal sesuai harga. Catatan: <em>[Nama] — [Produk]</em></p>
-      <p style="margin-top:8px;padding:8px;background:var(--goldsoft);border-radius:8px;font-size:13px">Jangan bagikan nomor DANA ini secara publik.</p>
-    </div>
-  </div>
-
-  <div class="steps" style="text-align:left">
-    <h3>Langkah selanjutnya</h3>
-    <div class="step"><span class="step-num">1</span><p>Bayar sesuai nominal produk</p></div>
-    <div class="step"><span class="step-num">2</span><p>Upload bukti bayar (screenshot mutasi/transfer)</p></div>
-    <div class="step"><span class="step-num">3</span><p>Tim kami verifikasi (target: 1x24 jam)</p></div>
-    <div class="step"><span class="step-num">4</span><p>Produk dikirim via email + link Google Drive</p></div>
   </div>
 
   <div class="faq" style="text-align:left">
     <h3>FAQ</h3>
     <div class="faq-item">
       <strong>Berapa lama verifikasi?</strong>
-      <p>Target 1x24 jam dari waktu bayar. Verifikasi dilakukan manual oleh tim kami.</p>
+      <p>Target 1x24 jam dari waktu konfirmasi. Verifikasi dilakukan manual oleh tim kami.</p>
     </div>
     <div class="faq-item">
       <strong>Nominal tidak sesuai?</strong>
@@ -105,6 +85,40 @@
 </main>
 
 <footer class="wrap"><div class="foot"><span>&copy; <span data-year></span> NR Digital Studio — Pilah by Nurwanda R.</span><code>pilah thank-you</code></div></footer>
-<script>document.addEventListener('DOMContentLoaded',function(){var y=document.querySelector('[data-year]');if(y)y.textContent=new Date().getFullYear();});</script>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var y = document.querySelector('[data-year]');
+  if (y) y.textContent = new Date().getFullYear();
+
+  // Read order data from sessionStorage and populate
+  var STORAGE_KEY = 'pilah_order';
+  try {
+    var raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    var order = JSON.parse(raw);
+
+    var harga = order.harga || 0;
+    var hargaFormatted = harga ? 'Rp' + harga.toLocaleString('id-ID') : 'Sesuai produk';
+
+    setText('ty-order-id', order.order_id || 'Menunggu nomor order dari sistem');
+    setText('ty-product', order.product_name || order.sku || 'Ditentukan saat checkout');
+    setText('ty-price', hargaFormatted);
+    setText('ty-status', order.status || 'MENUNGGU_VERIFIKASI');
+
+    // Color the status
+    var statusEl = document.getElementById('ty-status');
+    if (statusEl) {
+      if (order.status === 'MENUNGGU_VERIFIKASI') statusEl.style.color = 'var(--gold)';
+      else if (order.status === 'TERVERIFIKASI') statusEl.style.color = 'var(--green)';
+      else statusEl.style.color = 'var(--gold)';
+    }
+  } catch(e) { /* no-op */ }
+
+  function setText(id, val) {
+    var el = document.getElementById(id);
+    if (el && val) el.textContent = val;
+  }
+});
+</script>
 </body>
 </html>
