@@ -55,6 +55,7 @@ test('pilah/bundle/index.html exists', () => {
 test('pilah/checkout/index.html exists', () => {
   assert.ok(fileExists('pilah/checkout/index.html'), 'pilah/checkout/index.html not found');
 });
+test('pilah/payment/index.html exists', () => { assert.ok(fileExists('pilah/payment/index.html')); });
 test('pilah/thank-you/index.html exists', () => {
   assert.ok(fileExists('pilah/thank-you/index.html'), 'pilah/thank-you/index.html not found');
 });
@@ -63,6 +64,7 @@ test('pilah/thank-you/index.html exists', () => {
 console.log('\nPricing');
 const checkoutHtml = readFile('pilah/checkout/index.html');
 const landingHtml = readFile('pilah/index.html');
+const paymentHtml = readFile('pilah/payment/index.html');
 const bundleHtml = readFile('pilah/bundle/index.html');
 
 test('Volume price Rp29.000 in landing', () => {
@@ -96,14 +98,14 @@ console.log('\nNo secrets');
 const allPilahHtml = [
   'pilah/index.html', 'pilah/vol-01/index.html', 'pilah/vol-02/index.html',
   'pilah/vol-03/index.html', 'pilah/bundle/index.html',
-  'pilah/checkout/index.html', 'pilah/thank-you/index.html'
+  'pilah/checkout/index.html', 'pilah/payment/index.html', 'pilah/thank-you/index.html'
 ];
 
 allPilahHtml.forEach(f => {
   const html = readFile(f);
   test(`No DANA number exposed in ${f} via plain text (085770702292 in checkout/thank-you is intentional)`, () => {
     // DANA number is allowed in checkout and thank-you (private pages), but NOT in public landing/volume pages
-    const isPrivatePage = f.includes('checkout') || f.includes('thank-you');
+    const isPrivatePage = f.includes('checkout') || f.includes('payment') || f.includes('thank-you');
     if (!isPrivatePage) {
       assert.ok(!html.includes('085770702292'), `${f} exposes DANA number publicly`);
     }
@@ -168,16 +170,9 @@ test('Checkout has whatsapp field', () => {
 test('Checkout has email field', () => {
   assert.ok(checkoutHtml.includes('name="email"'));
 });
-test('Checkout has file upload', () => {
-  assert.ok(checkoutHtml.includes('type="file"'));
-  assert.ok(checkoutHtml.includes('.jpg') || checkoutHtml.includes('image/'));
-});
-test('Checkout has QRIS payment', () => {
-  assert.ok(checkoutHtml.toLowerCase().includes('qris'));
-});
-test('Checkout has DANA payment', () => {
-  assert.ok(checkoutHtml.includes('DANA'));
-});
+test('Payment has file upload', () => { assert.ok(paymentHtml.includes('type="file"')); });
+test('Payment has QRIS payment', () => { assert.ok(paymentHtml.toLowerCase().includes('qris')); });
+test('Payment has DANA payment', () => { assert.ok(paymentHtml.includes('DANA')); });
 test('Checkout has noindex,nofollow', () => {
   assert.ok(checkoutHtml.includes('noindex'));
   assert.ok(checkoutHtml.includes('nofollow'));
@@ -211,10 +206,7 @@ console.log('\nMeta pixel stubs');
 test('meta-pixel.js exists', () => {
   assert.ok(fileExists('assets/pilah/js/meta-pixel.js'));
 });
-test('meta-pixel.js has empty metaPixelId', () => {
-  const pixelJs = readFile('assets/pilah/js/meta-pixel.js');
-  assert.ok(pixelJs.includes("metaPixelId = ''") || pixelJs.includes('metaPixelId: ""'));
-});
+test('meta-pixel.js has configured Pilah Pixel ID', () => { const pixelJs = readFile('assets/pilah/js/meta-pixel.js'); assert.ok(pixelJs.includes('858215920458180')); });
 test('No Purchase event in browser code', () => {
   const pixelJs = readFile('assets/pilah/js/meta-pixel.js');
   assert.ok(!pixelJs.includes("'Purchase'") && !pixelJs.includes('"Purchase"'), 'Purchase event found in browser code');

@@ -56,6 +56,11 @@ module.exports = async function handler(req, res) {
     });
   }
 
+  const bodySize = Number(req.headers['content-length'] || 0);
+  if (bodySize > 32768) {
+    return res.status(413).json({ success: false, error: 'Body terlalu besar' });
+  }
+
   // Validate input
   const validation = validateCheckout(req.body);
   if (!validation.valid) {
@@ -93,18 +98,21 @@ module.exports = async function handler(req, res) {
 
   const { order, idempotent } = result;
 
-  // Fire n8n webhook (async, don't await — fire-and-forget)
-  notifyN8n('ORDER_CREATED', {
-    order_id: order.order_id,
-    nama_lengkap: order.nama_lengkap,
-    whatsapp: order.whatsapp,
-    email: order.email,
-    sku: order.sku,
-    harga: order.harga,
-    status: order.status,
-    created_at: order.created_at,
-    expires_at: order.expires_at,
-  }).catch(() => {}); // silently ignore
+  try {
+    await notifyN8n('ORDER_CREATED', {
+      order_id: order.order_id,
+      nama_lengkap: order.nama_lengkap,
+      whatsapp: order.whatsapp,
+      email: order.email,
+      sku: order.sku,
+      harga: order.harga,
+      status: order.status,
+      created_at: order.created_at,
+      expires_at: order.expires_at,
+    });
+  } catch {
+    return res.status(503).json({ success: false, error: 'Sistem pencatatan order sedang bermasalah. Coba lagi.' });
+  }
 
   const statusCode = idempotent ? 200 : 201;
   return res.status(statusCode).json({
@@ -139,10 +147,3 @@ function buildResponse(order) {
         status_url: `/api/pilah/order/${order.order_id}/status?token=${order.access_token}`,
   };
 }
-41|  // Limit max body (order ~3KB is plenty; here max 32KB for MVP)
-  if (parseInt(req.headers['content-length']||'0',10) > 32768) {
-    return res.status(413).json({ success: false, error: 'Body terlalu besar' });
-  }
-    // Access token for proof/status endpoints
-    const accessToken = require('crypto').randomBytes(32).toString('hex');
-    order.access_token = accessToken;

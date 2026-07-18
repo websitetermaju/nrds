@@ -4,7 +4,7 @@
  */
 (function(){
   window.NRDS_CONFIG = window.NRDS_CONFIG || {};
-  window.NRDS_CONFIG.metaPixelId = ''; // Stub: empty = disabled
+  window.NRDS_CONFIG.metaPixelId = '858215920458180';
 
   var _pixelId = '';
   var _enabled = false;

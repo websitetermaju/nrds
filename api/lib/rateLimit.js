@@ -48,4 +48,6 @@ function _resetForTesting() {
   windows.clear();
 }
 
-module.exports = { checkRateLimit, _resetForTesting };
+const exported = { checkRateLimit };
+if (process.env.NODE_ENV === 'test') exported._resetForTesting = _resetForTesting;
+module.exports = exported;

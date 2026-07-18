@@ -165,6 +165,7 @@ function createOrder(data) {
 
   const order = {
     order_id: orderId,
+    access_token: require('crypto').randomBytes(32).toString('hex'),
     nama_lengkap: data.nama_lengkap,
     whatsapp: data.whatsapp,
     email: data.email,
@@ -310,7 +311,7 @@ function _resetForTesting() {
   _initialized = false;
 }
 
-module.exports = {
+const exported = {
   generateOrderId,
   generateIdempotencyKey,
   getOrder,
@@ -323,5 +324,6 @@ module.exports = {
   addAuditEntry,
   getAuditLog,
   listOrders,
-  _resetForTesting,
 };
+if (process.env.NODE_ENV === 'test') exported._resetForTesting = _resetForTesting;
+module.exports = exported;
