@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "python -m http.server 8080",
     "build": "node build.js",
+    "test": "node tests/test-pilah.js",
     "start": "python -m http.server 8080"
   }
 }

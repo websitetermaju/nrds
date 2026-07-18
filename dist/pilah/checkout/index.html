@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout — Pilah</title>
+  <meta name="description" content="Form checkout Pilah: pilih produk, isi data, bayar via QRIS atau DANA." />
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="stylesheet" href="../../assets/pilah/css/pilah.css" />
+  <script src="../../assets/pilah/js/meta-pixel.js" defer></script>
+</head>
+<body><a class="skip" href="#main">Lewati ke konten</a>
+<header class="topbar">
+  <div class="wrap nav">
+    <a class="brand" href="../index.html" aria-label="NR Digital Studio">
+      <div class="mark">NR</div><div><strong>NR Digital Studio</strong><span>AI products for Indonesian creators</span></div>
+    </a>
+    <nav class="desktop-nav">
+      <a href="../index.html">Home</a>
+      <a href="../index.html">Pilah</a>
+      <a class="active" href="index.html">Checkout</a>
+    </nav>
+    <a class="menu-btn" href="#menu">MENU</a>
+  </div>
+  <div class="wrap mobile-panel" id="menu">
+    <div class="mobile-links">
+      <a href="../index.html">Home</a>
+      <a href="../index.html">Pilah</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<div class="checkout-wrap wrap" id="checkout-form-wrap">
+  <h1>Checkout Pilah</h1>
+  <p class="lead">Pilih produk, isi data, lalu bayar via QRIS atau DANA. Proses verifikasi manual — tidak instan, tapi pasti.</p>
+
+  <form id="checkout-form" novalidate>
+    <div class="form-group">
+      <label>Pilih Produk <span class="req">*</span></label>
+      <div class="sku-list">
+        <div class="sku-item">
+          <input type="radio" name="sku" value="PLH-01" id="sku-01" />
+          <label for="sku-01">
+            <span class="sku-name">Vol.01 Bisnis</span>
+            <span class="sku-price">Rp29.000</span>
+            <span class="sku-old">Rp49.000</span>
+          </label>
+        </div>
+        <div class="sku-item">
+          <input type="radio" name="sku" value="PLH-02" id="sku-02" />
+          <label for="sku-02">
+            <span class="sku-name">Vol.02 Konten</span>
+            <span class="sku-price">Rp29.000</span>
+            <span class="sku-old">Rp49.000</span>
+          </label>
+        </div>
+        <div class="sku-item">
+          <input type="radio" name="sku" value="PLH-03" id="sku-03" />
+          <label for="sku-03">
+            <span class="sku-name">Vol.03 Sosial</span>
+            <span class="sku-price">Rp29.000</span>
+            <span class="sku-old">Rp49.000</span>
+          </label>
+        </div>
+        <div class="sku-item">
+          <input type="radio" name="sku" value="PLH-BUNDLE" id="sku-bundle" />
+          <label for="sku-bundle">
+            <span class="sku-name">Bundle 3 Vol</span>
+            <span class="sku-price" style="color:#8a6c1a">Rp59.000</span>
+            <span class="sku-old">Rp99.000</span>
+          </label>
+        </div>
+      </div>
+      <div class="error-msg" data-error="sku_terpilih"></div>
+    </div>
+
+    <div class="form-group">
+      <label for="nama">Nama Lengkap <span class="req">*</span></label>
+      <input type="text" id="nama" name="nama_lengkap" placeholder="Contoh: Ahmad Pratama" required minlength="2" maxlength="100" autocomplete="name" />
+      <div class="hint">Hanya huruf, spasi, titik, atau tandahubung</div>
+      <div class="error-msg" data-error="nama_lengkap"></div>
+    </div>
+
+    <div class="form-group">
+      <label for="wa">Nomor WhatsApp <span class="req">*</span></label>
+      <input type="tel" id="wa" name="whatsapp" placeholder="08XXXXXXXXXX" required inputmode="numeric" autocomplete="tel" />
+      <div class="hint">Format: 08XXXXXXXXXX (10-15 digit). Untuk follow-up &amp; support.</div>
+      <div class="error-msg" data-error="whatsapp"></div>
+    </div>
+
+    <div class="form-group">
+      <label for="email">Email <span class="req">*</span></label>
+      <input type="email" id="email" name="email" placeholder="nama@email.com" required autocomplete="email" />
+      <div class="hint">Untuk pengiriman produk. Pastikan email aktif.</div>
+      <div class="error-msg" data-error="email"></div>
+    </div>
+
+    <button type="submit" id="submit-btn" class="btn primary" style="width:100%;padding:16px">Lanjut ke Pembayaran</button>
+    <p style="text-align:center;font-size:12px;color:var(--faint);margin-top:12px">Dengan melanjutkan, kamu menyetujui <a href="#privacy" style="color:var(--green);text-decoration:underline">kebijakan privasi</a> kami.</p>
+  </form>
+</div>
+
+<div class="checkout-wrap wrap" id="result-section" style="display:none">
+  <h1>Pembayaran</h1>
+  <p class="lead">Order kamu sudah tercatat. Pilih metode pembayaran di bawah, bayar sesuai nominal, lalu upload bukti bayar.</p>
+
+  <div class="order-summary">
+    <dl>
+      <dt>Produk</dt><dd id="result-product">-</dd>
+      <dt>Harga</dt><dd id="result-price">-</dd>
+      <dt>Nama</dt><dd id="result-name">-</dd>
+      <dt>SKU</dt><dd id="result-sku">-</dd>
+    </dl>
+  </div>
+
+  <div class="pay-methods">
+    <h3>Metode Pembayaran</h3>
+    <div class="pay-tab">
+      <button class="active" onclick="switchPay('qris')" type="button">QRIS</button>
+      <button onclick="switchPay('dana')" type="button">DANA</button>
+    </div>
+    <div class="pay-panel active" id="pay-qris">
+      <img src="../../assets/pilah/qris-kios-adelin-checkout.png" alt="QR Code QRIS — Kios Adelin" class="qris-img" />
+      <div class="pay-instructions">
+        <p><strong>Cara bayar QRIS:</strong></p>
+        <ol style="padding-left:18px;margin:8px 0">
+          <li>Buka app bank atau e-wallet (GoPay, OVO, DANA, ShopeePay, dll.)</li>
+          <li>Pilih menu scan / bayar QRIS</li>
+          <li>Scan QR di atas</li>
+          <li>Bayar sesuai harga: <span class="nominal" id="upload-nominal">Rp29.000</span></li>
+        </ol>
+        <p><strong>Catatan:</strong> Nominal harus persis. Tidak ada toleransi untuk MVP.</p>
+      </div>
+    </div>
+    <div class="pay-panel" id="pay-dana">
+      <div class="pay-instructions">
+        <p><strong>Cara bayar DANA:</strong></p>
+        <ol style="padding-left:18px;margin:8px 0">
+          <li>Buka aplikasi DANA</li>
+          <li>Pilih <strong>Kirim</strong></li>
+          <li>Masukkan nomor: <strong>085770702292</strong></li>
+          <li>Nama rekening: <strong>Nurwanda Romadhon</strong></li>
+          <li>Masukkan nominal sesuai harga produk</li>
+          <li>Di catatan, tulis: <em>[Nama Kamu] — [Nama Produk]</em></li>
+        </ol>
+        <p style="margin-top:10px;padding:10px;background:var(--goldsoft);border-radius:8px;font-size:13px"><strong>Privasi:</strong> Jangan screenshot halaman ini dan bagikan ke publik. Nomor DANA hanya untuk pembeli.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="pay-methods">
+    <h3>Upload Bukti Bayar</h3>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:14px">Setelah bayar, upload screenshot mutasi atau bukti transfer. Format: JPG, PNG, WebP. Maks 5MB.</p>
+    <div class="upload-area">
+      <input type="file" accept=".jpg,.jpeg,.png,.webp" />
+      <p>Klik atau seret file bukti bayar ke sini</p>
+      <p style="font-size:12px;color:var(--faint);margin-top:4px">JPG, PNG, WebP — Maks 5MB</p>
+    </div>
+    <p style="font-size:12px;color:var(--faint);margin-top:8px">Fitur upload ini adalah placeholder. Upload bukti bayar akan aktif setelah backend tersedia.</p>
+  </div>
+
+  <div class="steps">
+    <h3>Yang terjadi setelah bayar</h3>
+    <div class="step"><span class="step-num">1</span><p>Kamu upload bukti bayar</p></div>
+    <div class="step"><span class="step-num">2</span><p>Tim kami verifikasi mutasi (target: 1x24 jam)</p></div>
+    <div class="step"><span class="step-num">3</span><p>Produk dikirim via email + link Google Drive</p></div>
+    <div class="step"><span class="step-num">4</span><p>Akses Discord support (untuk bundle)</p></div>
+  </div>
+
+  <p style="text-align:center;font-size:13px;color:var(--muted);margin-top:16px">Butuh bantuan? <a href="https://wa.me/6285770702292" style="color:var(--green);font-weight:700;text-decoration:underline" target="_blank" rel="noopener">Chat WhatsApp</a></p>
+</div>
+
+<section class="wrap" id="privacy">
+  <div class="privacy">
+    <h3>Privasi &amp; Pelacakan</h3>
+    <p>Situs ini menggunakan cookie teknis untuk keamanan dan fungsionalitas sesi. Pelacakan meta pixel (Facebook/Instagram) dinonaktifkan sampai dikonfigurasi oleh pemilik situs — tidak ada event yang dikirim ke server Meta tanpa ID pixel yang valid.</p>
+    <ul>
+      <li>Cookie hanya untuk keamanan sesi — tidak digunakan untuk pelacakan lintas situs</li>
+      <li>Pelacakan konversi (meta pixel) belum aktif — ID pixel kosong sampai dikonfigurasi</li>
+      <li>Data form (nama, WhatsApp, email) hanya diproses saat backend checkout aktif</li>
+      <li>Data tidak dijual atau dibagikan ke pihak ketiga</li>
+      <li>Bukti bayar disimpan sementara untuk verifikasi, dihapus setelah 30 hari</li>
+    </ul>
+    <p>Kebijakan privasi lengkap akan tersedia sebelum peluncuran penuh. Jika ada pertanyaan, hubungi via WhatsApp.</p>
+  </div>
+</section>
+</main>
+
+<footer class="wrap"><div class="foot"><span>&copy; <span data-year></span> NR Digital Studio — Pilah by Nurwanda R.</span><code>pilah checkout</code></div></footer>
+<script src="../../assets/pilah/js/meta-pixel.js"></script>
+<script src="../../assets/pilah/js/checkout.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  var y=document.querySelector('[data-year]');
+  if(y)y.textContent=new Date().getFullYear();
+  window.switchPay = function(method){
+    document.querySelectorAll('.pay-tab button').forEach(function(b){b.classList.remove('active');});
+    document.querySelectorAll('.pay-panel').forEach(function(p){p.classList.remove('active');});
+    if(method==='qris'){
+      document.querySelector('.pay-tab button:first-child').classList.add('active');
+      document.getElementById('pay-qris').classList.add('active');
+    } else {
+      document.querySelector('.pay-tab button:last-child').classList.add('active');
+      document.getElementById('pay-dana').classList.add('active');
+    }
+  };
+});
+</script>
+</body>
+</html>
