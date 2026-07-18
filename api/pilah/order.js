@@ -31,10 +31,9 @@ function getClientIp(req) {
 }
 
 module.exports = async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  const { setCorsAndSecHeaders } = require('../lib/cors');
+
+    setCorsAndSecHeaders(res, { methods: 'POST,OPTIONS' });
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -136,7 +135,14 @@ function buildResponse(order) {
       dana_name: PAYMENT.dana_name,
       dana_instructions,
     },
-    upload_url: `/api/pilah/order/${order.order_id}/proof`,
-    status_url: `/api/pilah/order/${order.order_id}/status`,
+        upload_url: `/api/pilah/order/${order.order_id}/proof?token=${order.access_token}`,
+        status_url: `/api/pilah/order/${order.order_id}/status?token=${order.access_token}`,
   };
 }
+41|  // Limit max body (order ~3KB is plenty; here max 32KB for MVP)
+  if (parseInt(req.headers['content-length']||'0',10) > 32768) {
+    return res.status(413).json({ success: false, error: 'Body terlalu besar' });
+  }
+    // Access token for proof/status endpoints
+    const accessToken = require('crypto').randomBytes(32).toString('hex');
+    order.access_token = accessToken;

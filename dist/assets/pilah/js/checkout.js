@@ -1,7 +1,6 @@
 /**
- * Pilah — Checkout form UI logic
- * Client-side only. No real order submission.
- * Validates form, shows payment info, placeholder upload.
+ * Pilah — Checkout form UI logic (Page 1 of 2)
+ * Client-side form validation → POST /api/pilah/order → sessionStorage → redirect to payment
  */
 (function(){
   var SKU_DATA = {
@@ -11,24 +10,34 @@
     'PLH-BUNDLE': { name: 'Pilah Bundle — 3 Volume + 9 Skills', price: 59000 }
   };
 
-  var form, skuInputs, submitBtn, checkoutForm, resultSection;
+  var STORAGE_KEY = 'pilah_order';
+  var form, submitBtn, loadingEl, globalErrEl;
   var errors = {};
 
   function init() {
     form = document.getElementById('checkout-form');
-    checkoutForm = document.getElementById('checkout-form-wrap');
-    resultSection = document.getElementById('result-section');
     if (!form) return;
-
-    skuInputs = form.querySelectorAll('input[name="sku"]');
     submitBtn = document.getElementById('submit-btn');
+    loadingEl = document.getElementById('checkout-loading');
+    globalErrEl = document.getElementById('global-error');
 
     // Preselect SKU from URL param
     var urlParams = new URLSearchParams(window.location.search);
     var preSku = urlParams.get('sku');
     if (preSku && SKU_DATA[preSku]) {
       var radio = form.querySelector('input[name="sku"][value="' + preSku + '"]');
-      if (radio) radio.checked = true;
+      if (radio) {
+        radio.checked = true;
+        updatePricePreview(preSku);
+      }
+    }
+
+    // SKU change → update price preview
+    var skuInputs = form.querySelectorAll('input[name="sku"]');
+    for (var i = 0; i < skuInputs.length; i++) {
+      skuInputs[i].addEventListener('change', function(){
+        updatePricePreview(this.value);
+      });
     }
 
     form.addEventListener('submit', onSubmit);
@@ -48,12 +57,22 @@
     }
   }
 
+  function updatePricePreview(sku) {
+    var preview = document.getElementById('price-preview');
+    var data = SKU_DATA[sku];
+    if (!preview || !data) { if (preview) preview.style.display = 'none'; return; }
+    document.getElementById('preview-product').textContent = data.name;
+    document.getElementById('preview-price').textContent = 'Rp' + data.price.toLocaleString('id-ID');
+    preview.style.display = 'block';
+  }
+
   function clearErrors() {
     errors = {};
     var msgs = form.querySelectorAll('.error-msg');
     for (var i = 0; i < msgs.length; i++) msgs[i].style.display = 'none';
     var inputs = form.querySelectorAll('input, select');
-    for (var i = 0; i < inputs.length; i++) inputs[i].style.borderColor = '';
+    for (var i = 0; i < inputs.length; i++) inputs[i].borderColor = '';
+    if (globalErrEl) globalErrEl.style.display = 'none';
   }
 
   function showErr(name, msg) {
@@ -62,6 +81,10 @@
     var errEl = form.querySelector('[data-error="' + name + '"]');
     if (field) field.style.borderColor = 'var(--red)';
     if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+  }
+
+  function showGlobalErr(msg) {
+    if (globalErrEl) { globalErrEl.textContent = msg; globalErrEl.style.display = 'block'; }
   }
 
   function validate() {
@@ -103,6 +126,21 @@
     return valid;
   }
 
+  function setLoading(on) {
+    if (!loadingEl) return;
+    if (on) {
+      loadingEl.style.display = 'flex';
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Memproses...'; }
+    } else {
+      loadingEl.style.display = 'none';
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Lanjut ke Pembayaran'; }
+    }
+  }
+
+  function generateOrderId() {
+    return 'PLH-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+  }
+
   function onSubmit(e) {
     e.preventDefault();
     if (!validate()) return;
@@ -111,70 +149,78 @@
     var sku = skuChecked ? skuChecked.value : '';
     var data = SKU_DATA[sku] || {};
     var nama = form.nama_lengkap.value.trim();
+    var wa = form.whatsapp.value.replace(/[\s\-\(\)\+]/g, '');
+    if (wa.startsWith('62')) wa = '0' + wa.slice(2);
+    var email = form.email.value.trim().toLowerCase();
 
-    // Track Lead (form submitted — no purchase yet)
+    // Track Lead
     if (window.NRDS_PIXEL) window.NRDS_PIXEL.lead({content_name: sku});
 
-    // Show result section
-    checkoutForm.style.display = 'none';
-    resultSection.style.display = 'block';
+    setLoading(true);
 
-    // Fill in order details
-    document.getElementById('result-product').textContent = data.name || sku;
-    document.getElementById('result-price').textContent = 'Rp' + (data.price || 0).toLocaleString('id-ID');
-    document.getElementById('result-name').textContent = nama;
-    document.getElementById('result-sku').textContent = sku;
-
-    // Set upload nominal
-    var nominalEl = document.getElementById('upload-nominal');
-    if (nominalEl) nominalEl.textContent = 'Rp' + (data.price || 0).toLocaleString('id-ID');
-
-    // Scroll to result
-    resultSection.scrollIntoView({behavior: 'smooth', block: 'start'});
-  }
-
-  // Upload placeholder handler
-  function setupUpload() {
-    var area = document.querySelector('.upload-area');
-    var fileInput = document.querySelector('.upload-area input[type=file]');
-    if (!area || !fileInput) return;
-
-    area.addEventListener('click', function(){ fileInput.click(); });
-    area.addEventListener('dragover', function(e){ e.preventDefault(); area.style.borderColor = 'var(--green)'; });
-    area.addEventListener('dragleave', function(){ area.style.borderColor = ''; });
-    area.addEventListener('drop', function(e){
-      e.preventDefault();
-      area.style.borderColor = '';
-      if (e.dataTransfer.files.length) {
-        fileInput.files = e.dataTransfer.files;
-        showUploadPreview(fileInput.files[0]);
+    // Try POST to backend API
+    fetch('/api/pilah/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nama_lengkap: nama,
+        whatsapp: wa,
+        email: email,
+        sku: sku,
+        idempotency_key: 'client-' + Date.now()
+      })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(resp) {
+      if (resp.success && resp.data) {
+        // API returned order — store full response
+        var orderData = resp.data;
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(orderData));
+        window.location.href = '../payment/index.html?order=' + orderData.order_id;
+      } else {
+        // API error — fallback to client-side only
+        fallbackSaveAndRedirect(sku, data, nama, wa, email, resp.errors);
       }
-    });
-    fileInput.addEventListener('change', function(){
-      if (fileInput.files.length) showUploadPreview(fileInput.files[0]);
-    });
+    })
+        .catch(function(err) {
+          // API unreachable — fallback only if not production, otherwise fail-closed
+          if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            fallbackSaveAndRedirect(sku, data, nama, wa, email, null);
+          } else {
+            showGlobalErr('Checkout gagal: server tidak merespons. Silakan coba ulang beberapa menit lagi.');
+            setLoading(false);
+          }
+        });
   }
 
-  function showUploadPreview(file) {
-    var area = document.querySelector('.upload-area');
-    if (!area) return;
-    var allowed = ['image/jpeg','image/png','image/webp'];
-    if (allowed.indexOf(file.type) === -1) {
-      alert('Format file tidak didukung. Gunakan JPG, PNG, atau WebP.');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Ukuran file terlalu besar (maks 5MB).');
-      return;
-    }
-    area.innerHTML = '<p style="color:var(--green);font-weight:700">✓ File terpilih: ' + file.name + '</p><p style="font-size:12px;color:var(--faint)">' + (file.size / 1024 / 1024).toFixed(2) + ' MB</p>';
-  }
+  function fallbackSaveAndRedirect(sku, skuInfo, nama, wa, email, apiErrors) {
+    var orderId = generateOrderId();
+    var orderData = {
+      order_id: orderId,
+      status: 'MENUNGGU_PEMBAYARAN',
+      nama_lengkap: nama,
+      whatsapp: wa,
+      email: email,
+      sku: sku,
+      harga: skuInfo.price || 0,
+      created_at: new Date().toISOString(),
+      product_name: skuInfo.name || sku,
+      payment: {
+        qris_image: '../../assets/pilah/qris-kios-adelin-checkout.png',
+        qris_instructions: 'Scan QR ini dan bayar sesuai harga produk yang dipilih.',
+        dana_number: '085770702292',
+        dana_name: 'Nurwanda Romadhon',
+        dana_instructions: 'Transfer Rp' + (skuInfo.price || 0).toLocaleString('id-ID') + ' ke nomor DANA. Catatan: ' + nama + ' — ' + (skuInfo.name || sku)
+      },
+      _fallback: true
+    };
 
-  // Expose setupUpload
-  window.NRDS_CHECKOUT = { setupUpload: setupUpload };
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(orderData));
+    setLoading(false);
+    window.location.href = '../payment/index.html?order=' + orderId;
+  }
 
   document.addEventListener('DOMContentLoaded', function(){
     init();
-    setupUpload();
   });
 })();

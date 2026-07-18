@@ -22,10 +22,10 @@ const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
  * Fire n8n webhook. Returns Promise that resolves true/false.
  */
 async function notifyN8n(event, orderData, previousStatus = null) {
-  if (!N8N_WEBHOOK_URL) {
-    // No webhook configured — skip silently
-    return false;
-  }
+    if (!N8N_WEBHOOK_URL) {
+      if (process.env.NODE_ENV === 'production') throw new Error('N8N_WEBHOOK_URL is required in production');
+      return false;
+    }
 
   const payload = JSON.stringify({
     event,
@@ -49,7 +49,10 @@ async function notifyN8n(event, orderData, previousStatus = null) {
       }, (res) => {
         // Consume response body
         res.resume();
-        resolve(res.statusCode >= 200 && res.statusCode < 300);
+                if (process.env.NODE_ENV === 'production' && (res.statusCode < 200 || res.statusCode >= 300)) {
+                  throw new Error(`n8n webhook failed with status ${res.statusCode}`);
+                }
+                resolve(res.statusCode >= 200 && res.statusCode < 300);
       });
 
       req.on('error', () => resolve(false));

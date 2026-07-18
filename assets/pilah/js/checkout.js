@@ -182,10 +182,15 @@
         fallbackSaveAndRedirect(sku, data, nama, wa, email, resp.errors);
       }
     })
-    .catch(function() {
-      // API unreachable — fallback
-      fallbackSaveAndRedirect(sku, data, nama, wa, email, null);
-    });
+        .catch(function(err) {
+          // API unreachable — fallback only if not production, otherwise fail-closed
+          if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            fallbackSaveAndRedirect(sku, data, nama, wa, email, null);
+          } else {
+            showGlobalErr('Checkout gagal: server tidak merespons. Silakan coba ulang beberapa menit lagi.');
+            setLoading(false);
+          }
+        });
   }
 
   function fallbackSaveAndRedirect(sku, skuInfo, nama, wa, email, apiErrors) {
