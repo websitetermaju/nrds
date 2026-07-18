@@ -1,0 +1,60 @@
+{
+  "name": "PILAH - Order Lifecycle - DRAFT",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pilah-order-events-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-order-events",
+      "name": "Webhook Order Events",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "pilah-order-events-v1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json; const allowed = ['ORDER_CREATED','PROOF_SUBMITTED','ORDER_STATUS_CHANGED']; if (!allowed.includes(body.event)) throw new Error('EVENT_NOT_ALLOWED'); const order = body.order ?? {}; const maskEmail = (v='') => { const [u,d=''] = String(v).split('@'); return u ? `${u.slice(0,2)}***@${d}` : ''; }; const maskWa = (v='') => { const s=String(v).replace(/\\D/g,''); return s.length > 4 ? `${s.slice(0,3)}***${s.slice(-3)}` : '***'; }; return [{json:{accepted:true,event:body.event,timestamp:body.timestamp ?? new Date().toISOString(),order:{id:order.id ?? order.orderId,sku:order.sku,status:order.status,email_masked:maskEmail(order.email),whatsapp_masked:maskWa(order.whatsapp)},buyer_email:order.email ?? '',buyer_name:order.nama ?? order.name ?? '',previousStatus:body.previousStatus ?? null,delivery_link:'{{$env.PILAH_DELIVERY_LINK_PLACEHOLDER}}'}}];"
+      },
+      "id": "validate-mask",
+      "name": "Validate Event and Mask CS Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict"},"conditions":[{"leftValue":"={{ $json.event }}","rightValue":"ORDER_CREATED","operator":{"type":"string","operation":"equals"}}],"combinator":"and"},"renameOutput":true,"outputKey":"order_created"},
+            {"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict"},"conditions":[{"leftValue":"={{ $json.event }}","rightValue":"PROOF_SUBMITTED","operator":{"type":"string","operation":"equals"}}],"combinator":"and"},"renameOutput":true,"outputKey":"proof_submitted"},
+            {"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict"},"conditions":[{"leftValue":"={{ $json.event }}","rightValue":"ORDER_STATUS_CHANGED","operator":{"type":"string","operation":"equals"}}],"combinator":"and"},"renameOutput":true,"outputKey":"status_changed"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-event",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {"respondWith":"json","responseBody":"={{ { accepted: true, event: $json.event, order_id: $json.order.id } }}","options":{}},
+      "id": "respond-accepted",
+      "name": "Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1020, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Order Events": {"main":[[{"node":"Validate Event and Mask CS Data","type":"main","index":0}]]},
+    "Validate Event and Mask CS Data": {"main":[[{"node":"Route Event","type":"main","index":0}]]},
+    "Route Event": {"main":[[{"node":"Respond Accepted","type":"main","index":0}],[{"node":"Respond Accepted","type":"main","index":0}],[{"node":"Respond Accepted","type":"main","index":0}]]}
+  },
+  "settings": {"executionOrder":"v1"}
+}
