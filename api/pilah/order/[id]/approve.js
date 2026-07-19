@@ -110,6 +110,11 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    // Hash buyer identifiers before forwarding to n8n/Meta CAPI.
+    const sha256 = (value) => crypto.createHash('sha256')
+      .update(String(value || '').trim().toLowerCase()).digest('hex');
+    const phoneDigits = String(prepared.order.whatsapp || '').replace(/\D/g, '');
+
     // Notify n8n BEFORE committing DISETUJUI
     try {
       await n8nLib.notifyN8n('ORDER_STATUS_CHANGED', {
@@ -121,7 +126,10 @@ module.exports = async function handler(req, res) {
         whatsapp: prepared.order.whatsapp,
         nama_lengkap: prepared.order.nama_lengkap,
         name: prepared.order.nama_lengkap,
-        status: prepared.order.status,
+        status: 'DISETUJUI',
+        access_token: prepared.order.access_token,
+        email_hash: sha256(prepared.order.email),
+        phone_hash: phoneDigits ? sha256(phoneDigits) : null,
         previous_status: prepared.previousStatus,
         verified_at: prepared.order.verified_at,
         alasan_penolakan: prepared.order.alasan_penolakan || null,

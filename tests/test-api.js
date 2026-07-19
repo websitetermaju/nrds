@@ -984,6 +984,14 @@ test('n8n helper receives ORDER_STATUS_CHANGED payload structure', () => {
   assert.strictEqual(typeof notifyN8n, 'function');
 });
 
+test('approval source sends final status, access token, and hashed identifiers to n8n', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../api/pilah/order/[id]/approve.js'), 'utf8');
+  assert.ok(source.includes("status: 'DISETUJUI'"));
+  assert.ok(source.includes('access_token: prepared.order.access_token'));
+  assert.ok(source.includes('email_hash: sha256(prepared.order.email)'));
+  assert.ok(source.includes('phone_hash: phoneDigits ? sha256(phoneDigits) : null'));
+});
+
 test('POST /approve with GET method → 405', async () => {
   const req = { method: 'GET', query: { id: approveOrderId, token: OWNER_TOKEN }, headers: {}, body: {} };
   const res = mockRes();
