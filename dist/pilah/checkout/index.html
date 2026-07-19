@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout — Pilah</title>
+  <meta name="description" content="Form checkout Pilah: pilih produk dan isi data pembeli." />
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="stylesheet" href="../../assets/pilah/css/pilah.css" />
+  <script src="../../assets/pilah/js/meta-pixel.js" defer></script>
+</head>
+<body><a class="skip" href="#main">Lewati ke konten</a>
+<header class="topbar">
+  <div class="wrap nav">
+    <a class="brand" href="../index.html" aria-label="NR Digital Studio">
+      <div class="mark">NR</div><div><strong>NR Digital Studio</strong><span>AI products for Indonesian creators</span></div>
+    </a>
+    <nav class="desktop-nav">
+      <a href="../index.html">Home</a>
+      <a href="../index.html">Pilah</a>
+      <a class="active" href="index.html">Checkout</a>
+    </nav>
+    <a class="menu-btn" href="#menu">MENU</a>
+  </div>
+  <div class="wrap mobile-panel" id="menu">
+    <div class="mobile-links">
+      <a href="../index.html">Home</a>
+      <a href="../index.html">Pilah</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<div class="checkout-wrap wrap">
+  <h1>Checkout Pilah</h1>
+  <p class="lead">Pilih produk, isi data diri kamu, lalu lanjut ke pembayaran.</p>
+
+  <!-- Loading overlay for API submission -->
+  <div id="checkout-loading" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center">
+    <div style="background:var(--card);padding:32px 40px;border-radius:16px;text-align:center">
+      <div style="font-size:28px;margin-bottom:12px">&#9203;</div>
+      <p style="font-weight:700;color:var(--text)">Memproses order...</p>
+      <p style="font-size:13px;color:var(--muted);margin-top:6px">Mohon tunggu sebentar</p>
+    </div>
+  </div>
+
+  <form id="checkout-form" novalidate>
+    <div class="form-group">
+      <label>Pilih Produk <span class="req">*</span></label>
+      <div class="sku-list">
+        <div class="sku-item">
+          <input type="radio" name="sku" value="PLH-01" id="sku-01" />
+          <label for="sku-01">
+            <span class="sku-name">Vol.01 Bisnis</span>
+            <span class="sku-price">Rp29.000</span>
+            <span class="sku-old">Rp49.000</span>
+          </label>
+        </div>
+        <div class="sku-item">
+          <input type="radio" name="sku" value="PLH-02" id="sku-02" />
+          <label for="sku-02">
+            <span class="sku-name">Vol.02 Konten</span>
+            <span class="sku-price">Rp29.000</span>
+            <span class="sku-old">Rp49.000</span>
+          </label>
+        </div>
+        <div class="sku-item">
+          <input type="radio" name="sku" value="PLH-03" id="sku-03" />
+          <label for="sku-03">
+            <span class="sku-name">Vol.03 Sosial</span>
+            <span class="sku-price">Rp29.000</span>
+            <span class="sku-old">Rp49.000</span>
+          </label>
+        </div>
+        <div class="sku-item">
+          <input type="radio" name="sku" value="PLH-BUNDLE" id="sku-bundle" />
+          <label for="sku-bundle">
+            <span class="sku-name">Bundle 3 Vol</span>
+            <span class="sku-price" style="color:#8a6c1a">Rp59.000</span>
+            <span class="sku-old">Rp99.000</span>
+          </label>
+        </div>
+      </div>
+      <div class="error-msg" data-error="sku_terpilih"></div>
+    </div>
+
+    <!-- Price summary preview -->
+    <div class="order-summary" id="price-preview" style="display:none">
+      <dl>
+        <dt>Produk</dt><dd id="preview-product">-</dd>
+        <dt>Harga</dt><dd id="preview-price">-</dd>
+      </dl>
+    </div>
+
+    <div class="form-group">
+      <label for="nama">Nama Lengkap <span class="req">*</span></label>
+      <input type="text" id="nama" name="nama_lengkap" placeholder="Contoh: Ahmad Pratama" required minlength="2" maxlength="100" autocomplete="name" />
+      <div class="hint">Hanya huruf, spasi, titik, atau tandahubung</div>
+      <div class="error-msg" data-error="nama_lengkap"></div>
+    </div>
+
+    <div class="form-group">
+      <label for="wa">Nomor WhatsApp <span class="req">*</span></label>
+      <input type="tel" id="wa" name="whatsapp" placeholder="08XXXXXXXXXX" required inputmode="numeric" autocomplete="tel" />
+      <div class="hint">Format: 08XXXXXXXXXX (10-15 digit). Untuk follow-up &amp; support.</div>
+      <div class="error-msg" data-error="whatsapp"></div>
+    </div>
+
+    <div class="form-group">
+      <label for="email">Email <span class="req">*</span></label>
+      <input type="email" id="email" name="email" placeholder="nama@email.com" required autocomplete="email" />
+      <div class="hint">Untuk pengiriman produk. Pastikan email aktif.</div>
+      <div class="error-msg" data-error="email"></div>
+    </div>
+
+    <div class="error-msg" id="global-error" style="display:none;text-align:center;margin-bottom:12px;padding:12px;background:rgba(220,38,38,0.1);border-radius:8px;color:var(--red)"></div>
+
+    <button type="submit" id="submit-btn" class="btn primary" style="width:100%;padding:16px">Lanjut ke Pembayaran</button>
+    <p style="text-align:center;font-size:12px;color:var(--faint);margin-top:12px">Dengan melanjutkan, kamu menyetujui <a href="#privacy" style="color:var(--green);text-decoration:underline">kebijakan privasi</a> kami.</p>
+  </form>
+</div>
+
+<section class="wrap" id="privacy">
+  <div class="privacy">
+    <h3>Privasi &amp; Pelacakan</h3>
+    <p>Situs ini menggunakan cookie teknis untuk keamanan dan fungsionalitas sesi. Pelacakan meta pixel (Facebook/Instagram) dinonaktifkan sampai dikonfigurasi oleh pemilik situs — tidak ada event yang dikirim ke server Meta tanpa ID pixel yang valid.</p>
+    <ul>
+      <li>Cookie hanya untuk keamanan sesi — tidak digunakan untuk pelacakan lintas situs</li>
+      <li>Pelacakan konversi (meta pixel) belum aktif — ID pixel kosong sampai dikonfigurasi</li>
+      <li>Data form (nama, WhatsApp, email) hanya diproses saat backend checkout aktif</li>
+      <li>Data tidak dijual atau dibagikan ke pihak ketiga</li>
+      <li>Bukti bayar disimpan sementara untuk verifikasi, dihapus setelah 30 hari</li>
+    </ul>
+    <p>Kebijakan privasi lengkap akan tersedia sebelum peluncuran penuh. Jika ada pertanyaan, hubungi via WhatsApp.</p>
+  </div>
+</section>
+</main>
+
+<footer class="wrap"><div class="foot"><span>&copy; <span data-year></span> NR Digital Studio — Pilah by Nurwanda R.</span><code>pilah checkout</code></div></footer>
+<script src="../../assets/pilah/js/meta-pixel.js"></script>
+<script src="../../assets/pilah/js/checkout.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  var y=document.querySelector('[data-year]');
+  if(y)y.textContent=new Date().getFullYear();
+});
+</script>
+</body>
+</html>

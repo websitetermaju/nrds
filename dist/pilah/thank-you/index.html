@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terima Kasih — Pilah</title>
+  <meta name="description" content="Pesanan Pilah kamu sudah tercatat. Ikuti langkah pembayaran di bawah." />
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="stylesheet" href="../../assets/pilah/css/pilah.css" />
+  <script src="../../assets/pilah/js/meta-pixel.js" defer></script>
+</head>
+<body><a class="skip" href="#main">Lewati ke konten</a>
+<header class="topbar">
+  <div class="wrap nav">
+    <a class="brand" href="../index.html" aria-label="NR Digital Studio">
+      <div class="mark">NR</div><div><strong>NR Digital Studio</strong><span>AI products for Indonesian creators</span></div>
+    </a>
+    <nav class="desktop-nav">
+      <a href="../index.html">Home</a>
+      <a href="../index.html">Pilah</a>
+    </nav>
+    <a class="menu-btn" href="#menu">MENU</a>
+  </div>
+  <div class="wrap mobile-panel" id="menu">
+    <div class="mobile-links">
+      <a href="../index.html">Home</a>
+      <a href="../index.html">Pilah</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<div class="thank-wrap wrap">
+  <div class="badge">Order Tercatat</div>
+  <h1>Terima Kasih!</h1>
+  <p class="lead">Konfirmasi pembayaran kamu sudah diterima. Tim kami akan memverifikasi dalam <strong>1x24 jam</strong>.</p>
+
+  <div class="order-summary" style="text-align:left">
+    <dl>
+      <dt>Order ID</dt><dd id="ty-order-id">Menunggu nomor order dari sistem</dd>
+      <dt>Produk</dt><dd id="ty-product">Ditentukan saat checkout</dd>
+      <dt>Harga</dt><dd id="ty-price">Sesuai produk</dd>
+      <dt>Status</dt><dd id="ty-status" style="color:var(--gold)">MENUNGGU_VERIFIKASI</dd>
+    </dl>
+  </div>
+
+  <div class="pay-methods" style="text-align:left">
+    <h3>Yang terjadi selanjutnya</h3>
+    <div class="steps">
+      <div class="step"><span class="step-num">1</span><p>Tim kami verifikasi bukti bayar &amp; mutasi</p></div>
+      <div class="step"><span class="step-num">2</span><p>Produk dikirim via email + link Google Drive</p></div>
+      <div class="step"><span class="step-num">3</span><p>Akses Discord support (untuk bundle)</p></div>
+    </div>
+  </div>
+
+  <div class="faq" style="text-align:left">
+    <h3>FAQ</h3>
+    <div class="faq-item">
+      <strong>Berapa lama verifikasi?</strong>
+      <p>Target 1x24 jam dari waktu konfirmasi. Verifikasi dilakukan manual oleh tim kami.</p>
+    </div>
+    <div class="faq-item">
+      <strong>Nominal tidak sesuai?</strong>
+      <p>Kami akan hubungi via WhatsApp untuk klarifikasi. Bukan auto-reject.</p>
+    </div>
+    <div class="faq-item">
+      <strong>Produk dikirim via apa?</strong>
+      <p>Email berisi link Google Drive untuk download produk. Cek spam/promotions jika tidak terlihat.</p>
+    </div>
+    <div class="faq-item">
+      <strong>Bagaimana jika ada masalah?</strong>
+      <p>Hubungi WhatsApp CS: <a href="https://wa.me/6285770702292" style="color:var(--green);font-weight:700;text-decoration:underline" target="_blank" rel="noopener">0857-7070-2292</a></p>
+    </div>
+  </div>
+
+  <p style="font-size:14px;color:var(--muted);margin-top:20px">Butuh bantuan? <a href="https://wa.me/6285770702292" style="color:var(--green);font-weight:700;text-decoration:underline" target="_blank" rel="noopener">Chat WhatsApp</a></p>
+</div>
+
+<section class="wrap">
+  <div class="privacy">
+    <h3>Privasi &amp; Pelacakan</h3>
+    <p>Halaman ini bersifat privat. Tidak ada data pribadi atau nomor pembayaran yang dipublikasikan. Cookie teknis hanya untuk keamanan sesi. Pelacakan meta pixel belum aktif.</p>
+  </div>
+</section>
+</main>
+
+<footer class="wrap"><div class="foot"><span>&copy; <span data-year></span> NR Digital Studio — Pilah by Nurwanda R.</span><code>pilah thank-you</code></div></footer>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var y = document.querySelector('[data-year]');
+  if (y) y.textContent = new Date().getFullYear();
+
+  // Read order data from sessionStorage and populate
+  var STORAGE_KEY = 'pilah_order';
+  try {
+    var raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    var order = JSON.parse(raw);
+
+    var harga = order.harga || 0;
+    var hargaFormatted = harga ? 'Rp' + harga.toLocaleString('id-ID') : 'Sesuai produk';
+
+    setText('ty-order-id', order.order_id || 'Menunggu nomor order dari sistem');
+    setText('ty-product', order.product_name || order.sku || 'Ditentukan saat checkout');
+    setText('ty-price', hargaFormatted);
+    setText('ty-status', order.status || 'MENUNGGU_VERIFIKASI');
+
+    // Color the status
+    var statusEl = document.getElementById('ty-status');
+    if (statusEl) {
+      if (order.status === 'MENUNGGU_VERIFIKASI') statusEl.style.color = 'var(--gold)';
+      else if (order.status === 'TERVERIFIKASI') statusEl.style.color = 'var(--green)';
+      else statusEl.style.color = 'var(--gold)';
+    }
+  } catch(e) { /* no-op */ }
+
+  function setText(id, val) {
+    var el = document.getElementById(id);
+    if (el && val) el.textContent = val;
+  }
+});
+</script>
+</body>
+</html>

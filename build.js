@@ -13,7 +13,8 @@ const include = [
   'robots.txt',
   'sitemap.xml',
   'vercel.json',
-  'assets'
+  'assets',
+  'pilah'
 ];
 
 function rmrf(p) {
