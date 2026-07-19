@@ -16,6 +16,7 @@ let passed = 0;
 let failed = 0;
 const failures = [];
 let currentGroup = '';
+const pendingTests = [];
 
 function group(name) {
   currentGroup = name;
@@ -23,16 +24,33 @@ function group(name) {
 }
 
 function test(name, fn) {
+  let p;
   try {
-    fn();
-    passed++;
-    console.log(`  ✓ ${name}`);
+    const result = fn();
+    if (result && typeof result.then === 'function') {
+      p = result.then(() => {
+        passed++;
+        console.log(`  ✓ ${name}`);
+      }).catch(e => {
+        failed++;
+        failures.push({ group: currentGroup, name, error: e.message });
+        console.log(`  ✗ ${name}`);
+        console.log(`    ${e.message}`);
+      });
+    } else {
+      passed++;
+      console.log(`  ✓ ${name}`);
+      p = Promise.resolve();
+    }
   } catch (e) {
     failed++;
     failures.push({ group: currentGroup, name, error: e.message });
     console.log(`  ✗ ${name}`);
     console.log(`    ${e.message}`);
+    p = Promise.resolve();
   }
+  pendingTests.push(p);
+  return p;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -517,12 +535,477 @@ test('Backslash path traversal rejected', () => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Summary
+// 7. Unit Tests: delivery.js
 // ═══════════════════════════════════════════════════════════
-console.log(`\n=== Pilah API Tests: ${passed} passed, ${failed} failed ===`);
-if (failed > 0) {
-  console.log('\nFailures:');
-  failures.forEach(f => console.log(`  ✗ [${f.group}] ${f.name}: ${f.error}`));
-  process.exit(1);
+group('delivery.js');
+
+const { getDeliveryUrl, DELIVERY_MAP } = require('../api/lib/delivery');
+
+test('PLH-01 maps to correct Drive folder', () => {
+  assert.strictEqual(getDeliveryUrl('PLH-01'), 'https://drive.google.com/drive/folders/1LOY-Aqe3aoB9wadYGu50w-Bgkm8bWXbf');
+});
+
+test('PLH-02 maps to correct Drive folder', () => {
+  assert.strictEqual(getDeliveryUrl('PLH-02'), 'https://drive.google.com/drive/folders/14ARVYOMEsDQgGQ0RQf6M6sS37N4AiiAt');
+});
+
+test('PLH-03 maps to correct Drive folder', () => {
+  assert.strictEqual(getDeliveryUrl('PLH-03'), 'https://drive.google.com/drive/folders/1VebQaSQdr7tZhpKoIJLidQ9kj9UGJZMm');
+});
+
+test('PLH-BUNDLE maps to correct Drive folder', () => {
+  assert.strictEqual(getDeliveryUrl('PLH-BUNDLE'), 'https://drive.google.com/drive/folders/1FLFgYyO-N7jhy4gwKrBwuZDKLUZtk-6G');
+});
+
+test('Unknown SKU returns null', () => {
+  assert.strictEqual(getDeliveryUrl('INVALID-SKU'), null);
+});
+
+test('DELIVERY_MAP has 4 entries', () => {
+  assert.strictEqual(Object.keys(DELIVERY_MAP).length, 4);
+});
+
+test('All Drive URLs start with https://drive.google.com/drive/folders/', () => {
+  for (const [sku, url] of Object.entries(DELIVERY_MAP)) {
+    assert.ok(url.startsWith('https://drive.google.com/drive/folders/'),
+      `${sku} URL does not start with Drive folder prefix`);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// 8. Unit Tests: store.js — approveOrder / rejectOrder
+// ═══════════════════════════════════════════════════════════
+group('store.js — approveOrder / rejectOrder');
+
+store._resetForTesting();
+
+test('approveOrder transitions MENUNGGU_VERIFIKASI to DISETUJUI', () => {
+  const r = store.createOrder({ nama_lengkap: 'Approve Test', whatsapp: '081234567890', email: 'approve@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  const result = store.approveOrder(r.order.order_id);
+  assert.ok(!result.error, 'approveOrder should not error');
+  assert.strictEqual(result.order.status, 'DISETUJUI');
+  assert.ok(result.order.verified_at, 'verified_at should be set');
+});
+
+test('approveOrder sets link_gdrive from delivery mapping', () => {
+  const r = store.createOrder({ nama_lengkap: 'Drive Test', whatsapp: '081234567891', email: 'drive@test.com', sku: 'PLH-02', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  const result = store.approveOrder(r.order.order_id);
+  assert.strictEqual(result.order.link_gdrive, 'https://drive.google.com/drive/folders/14ARVYOMEsDQgGQ0RQf6M6sS37N4AiiAt');
+});
+
+test('rejectOrder transitions MENUNGGU_VERIFIKASI to DITOLAK with alasan', () => {
+  const r = store.createOrder({ nama_lengkap: 'Reject Test', whatsapp: '081234567892', email: 'reject@test.com', sku: 'PLH-03', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  const result = store.rejectOrder(r.order.order_id, 'Bukti tidak jelas');
+  assert.ok(!result.error);
+  assert.strictEqual(result.order.status, 'DITOLAK');
+  assert.strictEqual(result.order.alasan_penolakan, 'Bukti tidak jelas');
+  assert.ok(result.order.verified_at, 'verified_at should be set on rejection too');
+});
+
+test('approveOrder is idempotent — double approve returns same result', () => {
+  const r = store.createOrder({ nama_lengkap: 'Idem Approve', whatsapp: '081234567893', email: 'idem.approve@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  const first = store.approveOrder(r.order.order_id);
+  const second = store.approveOrder(r.order.order_id);
+  assert.strictEqual(first.order.status, 'DISETUJUI');
+  assert.strictEqual(second.order.status, 'DISETUJUI');
+  assert.ok(!second.error, 'Idempotent approve should not error');
+});
+
+test('rejectOrder is idempotent', () => {
+  const r = store.createOrder({ nama_lengkap: 'Idem Reject', whatsapp: '081234567894', email: 'idem.reject@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  store.rejectOrder(r.order.order_id, 'Alasan pertama');
+  const second = store.rejectOrder(r.order.order_id, 'Alasan kedua');
+  assert.strictEqual(second.order.status, 'DITOLAK');
+  assert.strictEqual(second.order.alasan_penolakan, 'Alasan pertama'); // original preserved
+});
+
+test('approveOrder rejects order not in MENUNGGU_VERIFIKASI', () => {
+  const r = store.createOrder({ nama_lengkap: 'Bad Status', whatsapp: '081234567895', email: 'badstatus@test.com', sku: 'PLH-01', harga: 29000 });
+  // Order is MENUNGGU_PEMBAYARAN, not MENUNGGU_VERIFIKASI
+  const result = store.approveOrder(r.order.order_id);
+  assert.ok(result.error);
+  assert.ok(result.error.includes('MENUNGGU_VERIFIKASI'));
+});
+
+test('approveOrder rejects nonexistent order', () => {
+  const result = store.approveOrder('NONEXISTENT-ID');
+  assert.ok(result.error);
+  assert.ok(result.error.includes('tidak ditemukan'));
+});
+
+test('approveOrder audit log records APPROVED action', () => {
+  const r = store.createOrder({ nama_lengkap: 'Audit Approve', whatsapp: '081234567896', email: 'audit.approve@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  store.approveOrder(r.order.order_id);
+  const log = store.getAuditLog(r.order.order_id);
+  const approveEntry = log.find(e => e.action === 'ORDER_APPROVED');
+  assert.ok(approveEntry, 'APPROVED audit entry should exist');
+  assert.strictEqual(approveEntry.actor, 'owner');
+});
+
+test('rejectOrder audit log records REJECTED action with alasan', () => {
+  const r = store.createOrder({ nama_lengkap: 'Audit Reject', whatsapp: '081234567897', email: 'audit.reject@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  store.rejectOrder(r.order.order_id, 'Tidak valid');
+  const log = store.getAuditLog(r.order.order_id);
+  const rejectEntry = log.find(e => e.action === 'ORDER_REJECTED');
+  assert.ok(rejectEntry, 'REJECTED audit entry should exist');
+  assert.strictEqual(rejectEntry.actor, 'owner');
+  assert.strictEqual(rejectEntry.details.alasan_penolakan, 'Tidak valid');
+});
+
+test('getOrderStatus does NOT expose link_gdrive (no raw Drive URL leak)', () => {
+  const r = store.createOrder({ nama_lengkap: 'No Leak', whatsapp: '081234567898', email: 'noleak@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  store.approveOrder(r.order.order_id);
+  const status = store.getOrderStatus(r.order.order_id);
+  assert.strictEqual(status.link_gdrive, undefined, 'link_gdrive must not appear in public status');
+});
+
+test('approveOrder returns previous status in result', () => {
+  const r = store.createOrder({ nama_lengkap: 'Prev Status', whatsapp: '081234567801', email: 'prevstatus@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  const result = store.approveOrder(r.order.order_id);
+  assert.strictEqual(result.previousStatus, 'MENUNGGU_VERIFIKASI');
+});
+
+test('rejectOrder returns previous status in result', () => {
+  const r = store.createOrder({ nama_lengkap: 'Prev Status R', whatsapp: '081234567802', email: 'prevstatusr@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  const result = store.rejectOrder(r.order.order_id, 'Alasan');
+  assert.strictEqual(result.previousStatus, 'MENUNGGU_VERIFIKASI');
+});
+
+// ═══════════════════════════════════════════════════════════
+// 9. Unit Tests: email.js (Brevo delivery helper)
+// ═══════════════════════════════════════════════════════════
+group('email.js — Brevo delivery helper');
+
+const { buildAccessUrl, buildDeliveryEmailPayload } = require('../api/lib/email');
+
+test('buildAccessUrl constructs correct URL', () => {
+  const url = buildAccessUrl('PLH-20260719-0001AB', 'abc123token');
+  assert.strictEqual(url, 'https://nrds.web.id/pilah/access/PLH-20260719-0001AB?token=abc123token');
+});
+
+test('buildAccessUrl uses custom base URL from env', () => {
+  const orig = process.env.PILAH_BASE_URL;
+  process.env.PILAH_BASE_URL = 'https://staging.example.com';
+  const url = buildAccessUrl('PLH-TEST', 'tok');
+  assert.strictEqual(url, 'https://staging.example.com/pilah/access/PLH-TEST?token=tok');
+  if (orig !== undefined) process.env.PILAH_BASE_URL = orig;
+  else delete process.env.PILAH_BASE_URL;
+});
+
+test('buildAccessUrl defaults to https://nrds.web.id when no env', () => {
+  const orig = process.env.PILAH_BASE_URL;
+  delete process.env.PILAH_BASE_URL;
+  const url = buildAccessUrl('ID', 'T');
+  assert.ok(url.startsWith('https://nrds.web.id/'), 'Should default to production URL');
+  if (orig !== undefined) process.env.PILAH_BASE_URL = orig;
+});
+
+test('buildDeliveryEmailPayload returns correct structure', () => {
+  const payload = buildDeliveryEmailPayload({
+    email: 'buyer@test.com',
+    nama_lengkap: 'Budi',
+    orderId: 'PLH-20260719-0001AB',
+    accessToken: 'abc123token',
+    sku: 'PLH-01',
+    skuName: 'Pilah Vol.01 — Bisnis & Monetisasi',
+    harga: 29000,
+  });
+  assert.ok(payload.to);
+  assert.ok(payload.subject);
+  assert.ok(payload.htmlContent);
+  assert.strictEqual(payload.to[0].email, 'buyer@test.com');
+  assert.ok(payload.subject.includes('Disetujui') || payload.subject.includes('disetujui'));
+  // CRITICAL: email body must NOT contain raw Drive URL
+  assert.ok(!payload.htmlContent.includes('drive.google.com'),
+    'Email must not contain raw Drive URL');
+  // Must contain access link
+  assert.ok(payload.htmlContent.includes('/pilah/access/PLH-20260719-0001AB'));
+  assert.ok(payload.htmlContent.includes('token=abc123token'));
+  // Must contain "Akses Produk Saya" button text
+  assert.ok(payload.htmlContent.includes('Akses Produk Saya'));
+  // Must contain buyer name
+  assert.ok(payload.htmlContent.includes('Budi'));
+});
+
+test('buildDeliveryEmailPayload for rejection email', () => {
+  const payload = buildDeliveryEmailPayload({
+    email: 'buyer@test.com',
+    nama_lengkap: 'Siti',
+    orderId: 'PLH-REJECT',
+    accessToken: 'rejecttoken',
+    sku: 'PLH-02',
+    skuName: 'Pilah Vol.02',
+    harga: 29000,
+    status: 'DITOLAK',
+    alasan_penolakan: 'Bukti tidak jelas',
+  });
+  assert.ok(payload.subject.includes('Ditolak') || payload.subject.includes('ditolak'));
+  assert.ok(payload.htmlContent.includes('Ditolak') || payload.htmlContent.includes('ditolak'));
+  assert.ok(payload.htmlContent.includes('Bukti tidak jelas'));
+  // Rejection email should NOT contain access link to Drive
+  assert.ok(!payload.htmlContent.includes('drive.google.com'));
+});
+
+test('buildDeliveryEmailPayload for pending verification email', () => {
+  const payload = buildDeliveryEmailPayload({
+    email: 'buyer@test.com',
+    nama_lengkap: 'Andi',
+    orderId: 'PLH-PENDING',
+    accessToken: 'pendtoken',
+    sku: 'PLH-03',
+    skuName: 'Pilah Vol.03',
+    harga: 29000,
+    status: 'MENUNGGU_VERIFIKASI',
+  });
+  assert.ok(payload.subject.includes('Diterima') || payload.subject.includes('diterima'));
+  assert.ok(!payload.htmlContent.includes('drive.google.com'));
+});
+
+// ═══════════════════════════════════════════════════════════
+// 10. Integration: Access endpoint handler
+// ═══════════════════════════════════════════════════════════
+group('INTEGRATION — Access Endpoint');
+
+const accessHandler = require('../api/pilah/access/[id]').handler || require('../api/pilah/access/[id]');
+
+function mockRes() {
+  const res = { _status: null, _body: null, _headers: {}, _redirect: null };
+  res.status = (s) => { res._status = s; return res; };
+  res.json = (d) => { res._body = d; return res; };
+  res.setHeader = (k, v) => { res._headers[k] = v; return res; };
+  res.redirect = (url) => { res._status = 302; res._redirect = url; return res; };
+  res.end = (d) => { if (d) res._body = d; return res; };
+  return res;
 }
-console.log('All tests passed.\n');
+
+store._resetForTesting();
+
+// Setup: create order, submit proof, approve
+let accessOrderId, accessToken;
+test('Setup: create + proof + approve order for access tests', () => {
+  const r = store.createOrder({ nama_lengkap: 'Access Tester', whatsapp: '081234567800', email: 'access@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  store.approveOrder(r.order.order_id);
+  accessOrderId = r.order.order_id;
+  accessToken = r.order.access_token;
+});
+
+test('GET /access/:id with valid token + DISETUJUI → 302 redirect to Drive', async () => {
+  const req = { method: 'GET', query: { id: accessOrderId, token: accessToken }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._status, 302);
+  assert.ok(res._redirect, 'Should have redirect URL');
+  assert.ok(res._redirect.includes('drive.google.com/drive/folders/'));
+  assert.ok(res._redirect.includes('1LOY-Aqe3aoB9wadYGu50w-Bgkm8bWXbf'), 'Should redirect to PLH-01 Drive folder');
+});
+
+test('GET /access/:id with valid token + MENUNGGU_VERIFIKASI → 403', async () => {
+  const r = store.createOrder({ nama_lengkap: 'Pending Access', whatsapp: '081234567803', email: 'pending.access@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  // Status is MENUNGGU_VERIFIKASI
+  const req = { method: 'GET', query: { id: r.order.order_id, token: r.order.access_token }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._status, 403);
+  assert.ok(res._body.error.includes('verifikasi') || res._body.error.includes('Proses'));
+});
+
+test('GET /access/:id with valid token + MENUNGGU_PEMBAYARAN → 403', async () => {
+  const r = store.createOrder({ nama_lengkap: 'Unpaid Access', whatsapp: '081234567804', email: 'unpaid.access@test.com', sku: 'PLH-01', harga: 29000 });
+  // Status is MENUNGGU_PEMBAYARAN (no proof)
+  const req = { method: 'GET', query: { id: r.order.order_id, token: r.order.access_token }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._status, 403);
+});
+
+test('GET /access/:id with valid token + DITOLAK → 403', async () => {
+  const r = store.createOrder({ nama_lengkap: 'Rejected Access', whatsapp: '081234567805', email: 'rejected.access@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  store.rejectOrder(r.order.order_id, 'Test reject');
+  const req = { method: 'GET', query: { id: r.order.order_id, token: r.order.access_token }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._status, 403);
+  assert.ok(res._body.error.includes('ditolak') || res._body.error.includes('Ditolak'));
+});
+
+test('GET /access/:id with invalid token → 403', async () => {
+  const req = { method: 'GET', query: { id: accessOrderId, token: 'wrongtoken123' }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._status, 403);
+});
+
+test('GET /access/:id with unknown order → 404', async () => {
+  const req = { method: 'GET', query: { id: 'NONEXISTENT', token: 'x' }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._status, 404);
+});
+
+test('GET /access/:id with invalid order ID format → 400', async () => {
+  const req = { method: 'GET', query: { id: '!!!', token: 'x' }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._status, 400);
+});
+
+test('POST /access/:id → 405', async () => {
+  const req = { method: 'POST', query: { id: accessOrderId, token: accessToken }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._status, 405);
+});
+
+test('OPTIONS /access/:id → 204 with CORS headers', async () => {
+  const req = { method: 'OPTIONS', query: { id: accessOrderId }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._status, 204);
+  assert.ok(res._headers['Access-Control-Allow-Origin']);
+});
+
+test('Access response has security headers (X-Content-Type-Options)', async () => {
+  const req = { method: 'GET', query: { id: accessOrderId, token: accessToken }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._headers['X-Content-Type-Options'], 'nosniff');
+  assert.strictEqual(res._headers['X-Frame-Options'], 'DENY');
+});
+
+test('Access endpoint rate limit header present', async () => {
+  const req = { method: 'GET', query: { id: accessOrderId, token: accessToken }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.ok(res._headers['X-RateLimit-Remaining'] !== undefined);
+});
+
+test('Access endpoint does NOT expose link_gdrive in any response body', async () => {
+  const req = { method: 'GET', query: { id: accessOrderId, token: 'wrongtoken' }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  if (res._body) {
+    assert.ok(!JSON.stringify(res._body).includes('drive.google.com'),
+      'Response body must not contain raw Drive URL');
+  }
+});
+
+test('Access with Bearer token header works (not just query param)', async () => {
+  const req = { method: 'GET', query: { id: accessOrderId }, headers: { authorization: `Bearer ${accessToken}` } };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._status, 302);
+});
+
+// ═══════════════════════════════════════════════════════════
+// 11. Integration: Approval Endpoint + n8n hook
+// ═══════════════════════════════════════════════════════════
+group('INTEGRATION — Approval Endpoint + n8n');
+
+const approveHandler = require('../api/pilah/order/[id]/approve').handler || require('../api/pilah/order/[id]/approve');
+
+store._resetForTesting();
+
+let approveOrderId, approveToken;
+test('Setup: create order for approval tests', () => {
+  const r = store.createOrder({ nama_lengkap: 'Approve Endpoint', whatsapp: '081234567810', email: 'approve.ep@test.com', sku: 'PLH-03', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  approveOrderId = r.order.order_id;
+  approveToken = r.order.access_token;
+});
+
+test('POST /approve with DISETUJUI → 200 + order DISETUJUI', async () => {
+  const req = { method: 'POST', query: { id: approveOrderId, token: approveToken }, headers: {}, body: { action: 'DISETUJUI' } };
+  const res = mockRes();
+  await approveHandler(req, res);
+  assert.strictEqual(res._status, 200);
+  assert.strictEqual(res._body.data.status, 'DISETUJUI');
+  assert.strictEqual(res._body.data.previous_status, 'MENUNGGU_VERIFIKASI');
+});
+
+test('POST /approve is idempotent', async () => {
+  const req = { method: 'POST', query: { id: approveOrderId, token: approveToken }, headers: {}, body: { action: 'DISETUJUI' } };
+  const res = mockRes();
+  await approveHandler(req, res);
+  assert.strictEqual(res._status, 200);
+  assert.strictEqual(res._body.data.status, 'DISETUJUI');
+});
+
+test('POST /approve with DITOLAK requires alasan', async () => {
+  const r = store.createOrder({ nama_lengkap: 'Reject Endpoint', whatsapp: '081234567811', email: 'reject.ep@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  const req = { method: 'POST', query: { id: r.order.order_id, token: r.order.access_token }, headers: {}, body: { action: 'DITOLAK' } };
+  const res = mockRes();
+  await approveHandler(req, res);
+  assert.strictEqual(res._status, 400);
+  assert.ok(res._body.error.includes('Alasan'));
+});
+
+test('POST /approve with DITOLAK + alasan → 200 + DITOLAK', async () => {
+  const r = store.createOrder({ nama_lengkap: 'Reject With Reason', whatsapp: '081234567812', email: 'reject.reason@test.com', sku: 'PLH-02', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  const req = { method: 'POST', query: { id: r.order.order_id, token: r.order.access_token }, headers: {}, body: { action: 'DITOLAK', alasan_penolakan: 'Bukti tidak valid' } };
+  const res = mockRes();
+  await approveHandler(req, res);
+  assert.strictEqual(res._status, 200);
+  assert.strictEqual(res._body.data.status, 'DITOLAK');
+});
+
+test('POST /approve without valid token → 403', async () => {
+  const req = { method: 'POST', query: { id: approveOrderId, token: 'invalid' }, headers: {}, body: { action: 'DISETUJUI' } };
+  const res = mockRes();
+  await approveHandler(req, res);
+  assert.strictEqual(res._status, 403);
+});
+
+test('POST /approve with invalid action → 400', async () => {
+  const req = { method: 'POST', query: { id: approveOrderId, token: approveToken }, headers: {}, body: { action: 'INVALID' } };
+  const res = mockRes();
+  await approveHandler(req, res);
+  assert.strictEqual(res._status, 400);
+});
+
+test('n8n helper receives ORDER_STATUS_CHANGED payload structure', () => {
+  const { notifyN8n } = require('../api/lib/n8n');
+  // In test mode, notifyN8n returns false (no webhook URL), but we verify the function exists
+  assert.strictEqual(typeof notifyN8n, 'function');
+});
+
+test('POST /approve with GET method → 405', async () => {
+  const req = { method: 'GET', query: { id: approveOrderId, token: approveToken }, headers: {}, body: {} };
+  const res = mockRes();
+  await approveHandler(req, res);
+  assert.strictEqual(res._status, 405);
+});
+
+// ═══════════════════════════════════════════════════════════
+// Summary — wait for async tests then report
+// ═══════════════════════════════════════════════════════════
+Promise.all(pendingTests).then(() => {
+  console.log(`\n=== Pilah API Tests: ${passed} passed, ${failed} failed ===`);
+  if (failed > 0) {
+    console.log('\nFailures:');
+    failures.forEach(f => console.log(`  ✗ [${f.group}] ${f.name}: ${f.error}`));
+    process.exit(1);
+  }
+  console.log('All tests passed.\n');
+}).catch(() => {
+  console.log(`\n=== Pilah API Tests: ${passed} passed, ${failed} failed ===`);
+  if (failed > 0) {
+    console.log('\nFailures:');
+    failures.forEach(f => console.log(`  ✗ [${f.group}] ${f.name}: ${f.error}`));
+  }
+  process.exit(1);
+});

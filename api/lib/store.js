@@ -237,7 +237,83 @@ function submitProof(orderId, proofData) {
 }
 
 /**
+ * Approve an order (owner action).
+ * Transitions: MENUNGGU_VERIFIKASI → DISETUJUI
+ * Idempotent: if already DISETUJUI, returns existing result.
+ * Sets link_gdrive from delivery mapping.
+ */
+function approveOrder(orderId) {
+  init();
+  const order = orders.get(orderId);
+  if (!order) return { error: 'Order tidak ditemukan' };
+
+  // Idempotent: already approved
+  if (order.status === 'DISETUJUI') {
+    return { order, previousStatus: order.status };
+  }
+
+  if (order.status !== 'MENUNGGU_VERIFIKASI') {
+    return { error: `Order harus dalam status MENUNGGU_VERIFIKASI, bukan ${order.status}` };
+  }
+
+  const previousStatus = order.status;
+  const now = new Date().toISOString();
+  const { getDeliveryUrl } = require('./delivery');
+  const driveUrl = getDeliveryUrl(order.sku);
+
+  order.status = 'DISETUJUI';
+  order.verified_at = now;
+  order.link_gdrive = driveUrl;
+  order.delivered_at = now;
+  order.updated_at = now;
+
+  addAuditEntry(orderId, 'ORDER_APPROVED', 'owner', {
+    sku: order.sku,
+    harga: order.harga,
+  });
+
+  saveToFile();
+  return { order, previousStatus };
+}
+
+/**
+ * Reject an order (owner action).
+ * Transitions: MENUNGGU_VERIFIKASI → DITOLAK
+ * Idempotent: if already DITOLAK, preserves original alasan.
+ */
+function rejectOrder(orderId, alasanPenolakan) {
+  init();
+  const order = orders.get(orderId);
+  if (!order) return { error: 'Order tidak ditemukan' };
+
+  // Idempotent: already rejected
+  if (order.status === 'DITOLAK') {
+    return { order, previousStatus: order.status };
+  }
+
+  if (order.status !== 'MENUNGGU_VERIFIKASI') {
+    return { error: `Order harus dalam status MENUNGGU_VERIFIKASI, bukan ${order.status}` };
+  }
+
+  const previousStatus = order.status;
+  const now = new Date().toISOString();
+
+  order.status = 'DITOLAK';
+  order.verified_at = now;
+  order.alasan_penolakan = alasanPenolakan || null;
+  order.updated_at = now;
+
+  addAuditEntry(orderId, 'ORDER_REJECTED', 'owner', {
+    alasan_penolakan: alasanPenolakan || null,
+  });
+
+  saveToFile();
+  return { order, previousStatus };
+}
+
+/**
  * Get order status summary (safe for buyer-facing response).
+ * ⚠️  Does NOT expose link_gdrive (raw Drive URL).
  */
 function getOrderStatus(orderId) {
   init();
@@ -321,6 +397,8 @@ const exported = {
   hasActiveOrder,
   createOrder,
   submitProof,
+   approveOrder,
+   rejectOrder,
   addAuditEntry,
   getAuditLog,
   listOrders,
