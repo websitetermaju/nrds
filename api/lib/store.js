@@ -237,10 +237,98 @@ function submitProof(orderId, proofData) {
 }
 
 /**
- * Approve an order (owner action).
+ * Prepare approval: MENUNGGU_VERIFIKASI → MENUNGGU_DELIVERY (transient).
+ * Idempotent: if already DISETUJUI, returns alreadyApproved=true.
+ * Retry-safe: if already MENUNGGU_DELIVERY (previous n8n failure), re-attempts.
+ * Does NOT commit to DISETUJUI — caller must call commitApproval after n8n.
+ */
+function prepareApproval(orderId) {
+  init();
+  const order = orders.get(orderId);
+  if (!order) return { error: 'Order tidak ditemukan' };
+
+  // Idempotent: already approved — no n8n needed
+  if (order.status === 'DISETUJUI') {
+    return { order, previousStatus: order.status, alreadyApproved: true };
+  }
+
+  // Retry: previous n8n attempt failed while in MENUNGGU_DELIVERY
+  if (order.status === 'MENUNGGU_DELIVERY') {
+    return { order, previousStatus: 'MENUNGGU_VERIFIKASI', retry: true };
+  }
+
+  if (order.status !== 'MENUNGGU_VERIFIKASI') {
+    return { error: `Order harus dalam status MENUNGGU_VERIFIKASI, bukan ${order.status}` };
+  }
+
+  const previousStatus = order.status;
+  order.status = 'MENUNGGU_DELIVERY';
+  order.updated_at = new Date().toISOString();
+
+  addAuditEntry(orderId, 'APPROVAL_PREPARED', 'owner', {});
+  saveToFile();
+  return { order, previousStatus };
+}
+
+/**
+ * Commit approval: MENUNGGU_DELIVERY → DISETUJUI.
+ * Called after successful n8n notification.
+ */
+function commitApproval(orderId) {
+  init();
+  const order = orders.get(orderId);
+  if (!order) return { error: 'Order tidak ditemukan' };
+
+  if (order.status !== 'MENUNGGU_DELIVERY') {
+    return { error: `Order harus dalam status MENUNGGU_DELIVERY, bukan ${order.status}` };
+  }
+
+  const now = new Date().toISOString();
+  const { getDeliveryUrl } = require('./delivery');
+  const driveUrl = getDeliveryUrl(order.sku);
+
+  order.status = 'DISETUJUI';
+  order.verified_at = now;
+  order.link_gdrive = driveUrl;
+  order.delivered_at = now;
+  order.updated_at = now;
+
+  addAuditEntry(orderId, 'ORDER_APPROVED', 'owner', {
+    sku: order.sku,
+    harga: order.harga,
+  });
+
+  saveToFile();
+  return { order };
+}
+
+/**
+ * Rollback approval: MENUNGGU_DELIVERY → MENUNGGU_VERIFIKASI.
+ * Called when n8n notification fails.
+ */
+function rollbackApproval(orderId) {
+  init();
+  const order = orders.get(orderId);
+  if (!order) return { error: 'Order tidak ditemukan' };
+
+  if (order.status !== 'MENUNGGU_DELIVERY') return { order };
+
+  order.status = 'MENUNGGU_VERIFIKASI';
+  order.updated_at = new Date().toISOString();
+
+  addAuditEntry(orderId, 'APPROVAL_ROLLBACK', 'system', {});
+  saveToFile();
+  return { order };
+}
+
+/**
+ * Approve an order (owner action) — immediate transition.
  * Transitions: MENUNGGU_VERIFIKASI → DISETUJUI
  * Idempotent: if already DISETUJUI, returns existing result.
  * Sets link_gdrive from delivery mapping.
+ *
+ * NOTE: For handler use with n8n delivery, prefer
+ * prepareApproval → commitApproval / rollbackApproval.
  */
 function approveOrder(orderId) {
   init();
@@ -288,7 +376,7 @@ function rejectOrder(orderId, alasanPenolakan) {
 
   // Idempotent: already rejected
   if (order.status === 'DITOLAK') {
-    return { order, previousStatus: order.status };
+    return { order, previousStatus: order.status, alreadyRejected: true };
   }
 
   if (order.status !== 'MENUNGGU_VERIFIKASI') {
@@ -320,9 +408,11 @@ function getOrderStatus(orderId) {
   const order = orders.get(orderId);
   if (!order) return null;
 
+  // Hide intermediate MENUNGGU_DELIVERY from buyer; show as MENUNGGU_VERIFIKASI
+  const displayStatus = order.status === 'MENUNGGU_DELIVERY' ? 'MENUNGGU_VERIFIKASI' : order.status;
   return {
     order_id: order.order_id,
-    status: order.status,
+    status: displayStatus,
     sku: order.sku,
     harga: order.harga,
     created_at: order.created_at,
@@ -397,8 +487,11 @@ const exported = {
   hasActiveOrder,
   createOrder,
   submitProof,
-   approveOrder,
-   rejectOrder,
+  prepareApproval,
+  commitApproval,
+  rollbackApproval,
+  approveOrder,
+  rejectOrder,
   addAuditEntry,
   getAuditLog,
   listOrders,

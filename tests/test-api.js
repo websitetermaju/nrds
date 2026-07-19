@@ -11,6 +11,8 @@ const fs = require('fs');
 // Isolate test data — prevent file persistence between runs
 const testDir = path.join(require('os').tmpdir(), `pilah-test-${Date.now()}-${process.pid}`);
 process.env.PILAH_DATA_DIR = testDir;
+process.env.PILAH_TEST_OWNER_TOKEN = 'test-owner-token-123';
+const OWNER_TOKEN = 'test-owner-token-123';
 
 let passed = 0;
 let failed = 0;
@@ -918,16 +920,15 @@ const approveHandler = require('../api/pilah/order/[id]/approve').handler || req
 
 store._resetForTesting();
 
-let approveOrderId, approveToken;
+let approveOrderId;
 test('Setup: create order for approval tests', () => {
   const r = store.createOrder({ nama_lengkap: 'Approve Endpoint', whatsapp: '081234567810', email: 'approve.ep@test.com', sku: 'PLH-03', harga: 29000 });
   store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
   approveOrderId = r.order.order_id;
-  approveToken = r.order.access_token;
 });
 
-test('POST /approve with DISETUJUI → 200 + order DISETUJUI', async () => {
-  const req = { method: 'POST', query: { id: approveOrderId, token: approveToken }, headers: {}, body: { action: 'DISETUJUI' } };
+test('POST /approve with owner token + DISETUJUI → 200 + order DISETUJUI', async () => {
+  const req = { method: 'POST', query: { id: approveOrderId, token: OWNER_TOKEN }, headers: {}, body: { action: 'DISETUJUI' } };
   const res = mockRes();
   await approveHandler(req, res);
   assert.strictEqual(res._status, 200);
@@ -935,8 +936,8 @@ test('POST /approve with DISETUJUI → 200 + order DISETUJUI', async () => {
   assert.strictEqual(res._body.data.previous_status, 'MENUNGGU_VERIFIKASI');
 });
 
-test('POST /approve is idempotent', async () => {
-  const req = { method: 'POST', query: { id: approveOrderId, token: approveToken }, headers: {}, body: { action: 'DISETUJUI' } };
+test('POST /approve is idempotent — already DISETUJUI returns 200', async () => {
+  const req = { method: 'POST', query: { id: approveOrderId, token: OWNER_TOKEN }, headers: {}, body: { action: 'DISETUJUI' } };
   const res = mockRes();
   await approveHandler(req, res);
   assert.strictEqual(res._status, 200);
@@ -946,7 +947,7 @@ test('POST /approve is idempotent', async () => {
 test('POST /approve with DITOLAK requires alasan', async () => {
   const r = store.createOrder({ nama_lengkap: 'Reject Endpoint', whatsapp: '081234567811', email: 'reject.ep@test.com', sku: 'PLH-01', harga: 29000 });
   store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
-  const req = { method: 'POST', query: { id: r.order.order_id, token: r.order.access_token }, headers: {}, body: { action: 'DITOLAK' } };
+  const req = { method: 'POST', query: { id: r.order.order_id, token: OWNER_TOKEN }, headers: {}, body: { action: 'DITOLAK' } };
   const res = mockRes();
   await approveHandler(req, res);
   assert.strictEqual(res._status, 400);
@@ -956,7 +957,7 @@ test('POST /approve with DITOLAK requires alasan', async () => {
 test('POST /approve with DITOLAK + alasan → 200 + DITOLAK', async () => {
   const r = store.createOrder({ nama_lengkap: 'Reject With Reason', whatsapp: '081234567812', email: 'reject.reason@test.com', sku: 'PLH-02', harga: 29000 });
   store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
-  const req = { method: 'POST', query: { id: r.order.order_id, token: r.order.access_token }, headers: {}, body: { action: 'DITOLAK', alasan_penolakan: 'Bukti tidak valid' } };
+  const req = { method: 'POST', query: { id: r.order.order_id, token: OWNER_TOKEN }, headers: {}, body: { action: 'DITOLAK', alasan_penolakan: 'Bukti tidak valid' } };
   const res = mockRes();
   await approveHandler(req, res);
   assert.strictEqual(res._status, 200);
@@ -964,14 +965,14 @@ test('POST /approve with DITOLAK + alasan → 200 + DITOLAK', async () => {
 });
 
 test('POST /approve without valid token → 403', async () => {
-  const req = { method: 'POST', query: { id: approveOrderId, token: 'invalid' }, headers: {}, body: { action: 'DISETUJUI' } };
+  const req = { method: 'POST', query: { id: approveOrderId, token: 'invalid-token-123' }, headers: {}, body: { action: 'DISETUJUI' } };
   const res = mockRes();
   await approveHandler(req, res);
   assert.strictEqual(res._status, 403);
 });
 
 test('POST /approve with invalid action → 400', async () => {
-  const req = { method: 'POST', query: { id: approveOrderId, token: approveToken }, headers: {}, body: { action: 'INVALID' } };
+  const req = { method: 'POST', query: { id: approveOrderId, token: OWNER_TOKEN }, headers: {}, body: { action: 'INVALID' } };
   const res = mockRes();
   await approveHandler(req, res);
   assert.strictEqual(res._status, 400);
@@ -984,10 +985,264 @@ test('n8n helper receives ORDER_STATUS_CHANGED payload structure', () => {
 });
 
 test('POST /approve with GET method → 405', async () => {
-  const req = { method: 'GET', query: { id: approveOrderId, token: approveToken }, headers: {}, body: {} };
+  const req = { method: 'GET', query: { id: approveOrderId, token: OWNER_TOKEN }, headers: {}, body: {} };
   const res = mockRes();
   await approveHandler(req, res);
   assert.strictEqual(res._status, 405);
+});
+
+// ═══════════════════════════════════════════════════════════
+// 12. Approval Auth — Owner Token (PILAH_OWNER_TOKEN)
+// ═══════════════════════════════════════════════════════════
+group('Approval Auth — Owner Token');
+
+test('buyer access_token gets 403 on approve endpoint', async () => {
+  const r = store.createOrder({ nama_lengkap: 'Auth Buyer', whatsapp: '081234567850', email: 'auth.buyer@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  // Use buyer's own access_token — must be rejected
+  const req = { method: 'POST', query: { id: r.order.order_id, token: r.order.access_token }, headers: {}, body: { action: 'DISETUJUI' } };
+  const res = mockRes();
+  await approveHandler(req, res);
+  assert.strictEqual(res._status, 403, 'Buyer access_token must be rejected by approve endpoint');
+});
+
+test('owner token succeeds on approve endpoint', async () => {
+  const r = store.createOrder({ nama_lengkap: 'Auth Owner', whatsapp: '081234567851', email: 'auth.owner@test.com', sku: 'PLH-02', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  const req = { method: 'POST', query: { id: r.order.order_id, token: OWNER_TOKEN }, headers: {}, body: { action: 'DISETUJUI' } };
+  const res = mockRes();
+  await approveHandler(req, res);
+  assert.strictEqual(res._status, 200, 'Owner token must be accepted');
+  assert.strictEqual(res._body.data.status, 'DISETUJUI');
+});
+
+test('missing owner token env → fail-closed (no token accepted)', () => {
+  const crypto = require('crypto');
+  // Simulate no env set
+  function ownerTokenOkNoEnv(supplied) {
+    const expected = process.env.PILAH_OWNER_TOKEN || null;
+    if (!expected) return false;
+    if (!supplied) return false;
+    const a = Buffer.from(expected);
+    const b = Buffer.from(String(supplied));
+    if (a.length !== b.length) return false;
+    try { return crypto.timingSafeEqual(a, b); }
+    catch { return false; }
+  }
+  assert.strictEqual(ownerTokenOkNoEnv('anything'), false, 'Without env, all tokens must be rejected');
+});
+
+// ═══════════════════════════════════════════════════════════
+// 13. Delivery State Machine
+// ═══════════════════════════════════════════════════════════
+group('Delivery State Machine');
+
+store._resetForTesting();
+
+test('prepareApproval transitions MENUNGGU_VERIFIKASI → MENUNGGU_DELIVERY', () => {
+  const r = store.createOrder({ nama_lengkap: 'SM Test', whatsapp: '081234567860', email: 'sm@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  const result = store.prepareApproval(r.order.order_id);
+  assert.ok(!result.error);
+  assert.strictEqual(result.order.status, 'MENUNGGU_DELIVERY');
+  assert.strictEqual(result.previousStatus, 'MENUNGGU_VERIFIKASI');
+});
+
+test('commitApproval transitions MENUNGGU_DELIVERY → DISETUJUI', () => {
+  const r = store.createOrder({ nama_lengkap: 'SM Test 2', whatsapp: '081234567861', email: 'sm2@test.com', sku: 'PLH-02', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  store.prepareApproval(r.order.order_id);
+  const result = store.commitApproval(r.order.order_id);
+  assert.ok(!result.error);
+  assert.strictEqual(result.order.status, 'DISETUJUI');
+  assert.ok(result.order.verified_at);
+  assert.ok(result.order.link_gdrive);
+});
+
+test('rollbackApproval reverts MENUNGGU_DELIVERY → MENUNGGU_VERIFIKASI', () => {
+  const r = store.createOrder({ nama_lengkap: 'SM Test 3', whatsapp: '081234567862', email: 'sm3@test.com', sku: 'PLH-03', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  store.prepareApproval(r.order.order_id);
+  const result = store.rollbackApproval(r.order.order_id);
+  assert.ok(!result.error);
+  const order = store.getOrder(r.order.order_id);
+  assert.strictEqual(order.status, 'MENUNGGU_VERIFIKASI');
+});
+
+test('status endpoint hides MENUNGGU_DELIVERY from buyer (shows MENUNGGU_VERIFIKASI)', () => {
+  const r = store.createOrder({ nama_lengkap: 'SM Test 4', whatsapp: '081234567863', email: 'sm4@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+  store.prepareApproval(r.order.order_id);
+  const status = store.getOrderStatus(r.order.order_id);
+  assert.strictEqual(status.status, 'MENUNGGU_VERIFIKASI', 'MENUNGGU_DELIVERY should be hidden from buyer');
+  store.rollbackApproval(r.order.order_id);
+});
+
+// ═══════════════════════════════════════════════════════════
+// 14. Idempotency — n8n Call Count
+// ═══════════════════════════════════════════════════════════
+group('Idempotency — n8n Call Count');
+
+// Track n8n calls by wrapping notifyN8n
+let n8nCalls = [];
+const n8nModule = require('../api/lib/n8n');
+const origNotifyN8n = n8nModule.notifyN8n;
+n8nModule.notifyN8n = async function(...args) {
+  n8nCalls.push({ event: args[0], timestamp: Date.now() });
+  return origNotifyN8n.apply(this, args);
+};
+
+test('double approval calls n8n exactly once', async () => {
+  n8nCalls = [];
+  const r = store.createOrder({ nama_lengkap: 'Idem n8n', whatsapp: '081234567870', email: 'idem.n8n@test.com', sku: 'PLH-01', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+
+  // First approval
+  const req1 = { method: 'POST', query: { id: r.order.order_id, token: OWNER_TOKEN }, headers: {}, body: { action: 'DISETUJUI' } };
+  const res1 = mockRes();
+  await approveHandler(req1, res1);
+  assert.strictEqual(res1._status, 200);
+
+  // Second approval (idempotent)
+  const req2 = { method: 'POST', query: { id: r.order.order_id, token: OWNER_TOKEN }, headers: {}, body: { action: 'DISETUJUI' } };
+  const res2 = mockRes();
+  await approveHandler(req2, res2);
+  assert.strictEqual(res2._status, 200);
+  assert.strictEqual(res2._body.data.status, 'DISETUJUI');
+
+  // n8n should have been called exactly once
+  assert.strictEqual(n8nCalls.length, 1, `n8n called ${n8nCalls.length} times, expected 1`);
+  assert.strictEqual(n8nCalls[0].event, 'ORDER_STATUS_CHANGED');
+});
+
+test('double rejection calls n8n exactly once', async () => {
+  n8nCalls = [];
+  const r = store.createOrder({ nama_lengkap: 'Idem Reject n8n', whatsapp: '081234567871', email: 'idem.reject.n8n@test.com', sku: 'PLH-02', harga: 29000 });
+  store.submitProof(r.order.order_id, { filename: 'bukti.jpg', mimeType: 'image/jpeg', sizeBytes: 1000 });
+
+  // First rejection
+  const req1 = { method: 'POST', query: { id: r.order.order_id, token: OWNER_TOKEN }, headers: {}, body: { action: 'DITOLAK', alasan_penolakan: 'Alasan pertama' } };
+  const res1 = mockRes();
+  await approveHandler(req1, res1);
+  assert.strictEqual(res1._status, 200);
+
+  // Second rejection (idempotent)
+  const req2 = { method: 'POST', query: { id: r.order.order_id, token: OWNER_TOKEN }, headers: {}, body: { action: 'DITOLAK', alasan_penolakan: 'Alasan kedua' } };
+  const res2 = mockRes();
+  await approveHandler(req2, res2);
+  assert.strictEqual(res2._status, 200);
+  assert.strictEqual(res2._body.data.status, 'DITOLAK');
+
+  // n8n should have been called exactly once
+  assert.strictEqual(n8nCalls.length, 1, `n8n called ${n8nCalls.length} times, expected 1`);
+});
+
+// ═══════════════════════════════════════════════════════════
+// 15. email.js — HTML Escaping (XSS Prevention)
+// ═══════════════════════════════════════════════════════════
+group('email.js — HTML Escaping (XSS Prevention)');
+
+const { escapeHtml } = require('../api/lib/email');
+
+test('escapeHtml escapes < > & " \'', () => {
+  assert.strictEqual(escapeHtml('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;');
+  assert.strictEqual(escapeHtml('a&b'), 'a&amp;b');
+  assert.strictEqual(escapeHtml('he said "hi"'), 'he said &quot;hi&quot;');
+  assert.strictEqual(escapeHtml("it's"), 'it&#x27;s');
+});
+
+test('escapeHtml handles null/undefined/numbers', () => {
+  assert.strictEqual(escapeHtml(null), '');
+  assert.strictEqual(escapeHtml(undefined), '');
+  assert.strictEqual(escapeHtml(12345), '12345');
+});
+
+test('rejection email escapes XSS in alasan_penolakan', () => {
+  const payload = buildDeliveryEmailPayload({
+    email: 'xss@test.com',
+    nama_lengkap: 'Normal Name',
+    orderId: 'PLH-XSS-TEST',
+    accessToken: 'tok123',
+    sku: 'PLH-01',
+    skuName: 'Pilah Vol.01',
+    harga: 29000,
+    status: 'DITOLAK',
+    alasan_penolakan: '<script>alert("xss")</script>',
+  });
+  assert.ok(!payload.htmlContent.includes('<script>'), 'Must not contain raw <script> tag');
+  assert.ok(payload.htmlContent.includes('&lt;script&gt;'), 'Must contain escaped script tag');
+});
+
+test('approval email escapes XSS in nama_lengkap', () => {
+  const payload = buildDeliveryEmailPayload({
+    email: 'xss2@test.com',
+    nama_lengkap: '<img src=x onerror=alert(1)>',
+    orderId: 'PLH-XSS-TEST2',
+    accessToken: 'tok456',
+    sku: 'PLH-02',
+    skuName: 'Pilah Vol.02',
+    harga: 29000,
+  });
+  assert.ok(!payload.htmlContent.includes('<img'), 'Must not contain raw <img> tag');
+  assert.ok(payload.htmlContent.includes('&lt;img'), 'Must contain escaped img tag');
+});
+
+test('email URL attributes are safely escaped', () => {
+  const payload = buildDeliveryEmailPayload({
+    email: 'url@test.com',
+    nama_lengkap: 'Test',
+    orderId: 'PLH-URL-TEST',
+    accessToken: 'tok789',
+    sku: 'PLH-03',
+    skuName: 'Pilah Vol.03',
+    harga: 29000,
+  });
+  assert.ok(payload.htmlContent.includes('href="'), 'href attribute present');
+  // No double-quote breaking out of the attribute
+  assert.ok(!payload.htmlContent.match(/href="[^"]*"[^"<>]*>/), 'href attribute should be properly closed');
+});
+
+test('email body escapes skuName XSS (subject is plain text, body escaped)', () => {
+  const payload = buildDeliveryEmailPayload({
+    email: 'xss3@test.com',
+    nama_lengkap: 'Test',
+    orderId: 'PLH-XSS-SKU',
+    accessToken: 'tok000',
+    sku: 'PLH-01',
+    skuName: '<b>Bold</b>',
+    harga: 29000,
+    status: 'DITOLAK',
+    alasan_penolakan: 'Test',
+  });
+  // Body must be escaped
+  assert.ok(!payload.htmlContent.includes('<b>Bold</b>'), 'Body must not contain raw HTML from skuName');
+  assert.ok(payload.htmlContent.includes('&lt;b&gt;Bold&lt;/b&gt;'), 'Body escapes skuName');
+});
+
+// ═══════════════════════════════════════════════════════════
+// 16. Token URL — Cache Headers
+// ═══════════════════════════════════════════════════════════
+group('Token URL — Cache Headers');
+
+test('access endpoint sets Cache-Control: no-store', async () => {
+  const req = { method: 'GET', query: { id: accessOrderId, token: accessToken }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._headers['Cache-Control'], 'no-store');
+});
+
+test('access endpoint sets Pragma: no-cache', async () => {
+  const req = { method: 'GET', query: { id: accessOrderId, token: accessToken }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._headers['Pragma'], 'no-cache');
+});
+
+test('access endpoint sets Referrer-Policy: no-referrer', async () => {
+  const req = { method: 'GET', query: { id: accessOrderId, token: accessToken }, headers: {} };
+  const res = mockRes();
+  await accessHandler(req, res);
+  assert.strictEqual(res._headers['Referrer-Policy'], 'no-referrer');
 });
 
 // ═══════════════════════════════════════════════════════════

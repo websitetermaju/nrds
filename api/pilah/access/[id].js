@@ -6,6 +6,15 @@
  * All other statuses → 403. Unknown order → 404.
  *
  * Never exposes raw Drive URL in response body.
+ *
+ * Token-in-URL tradeoff:
+ *   Tokens appear in the URL query string for email click-through UX.
+ *   This leaks via Referer header and browser history.
+ *   Mitigations applied:
+ *     - Cache-Control: no-store (prevents proxy/CDN caching of token URL)
+ *     - Pragma: no-cache (HTTP/1.0 compatibility)
+ *     - Referrer-Policy: no-referrer (prevents Referer leakage)
+ *   Tokens are never logged or included in response bodies.
  */
 const { getOrder } = require('../../lib/store');
 const { getDeliveryUrl } = require('../../lib/delivery');
@@ -35,6 +44,11 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'GET') return res.status(405).json({ success: false, error: 'Method not allowed' });
 
+  // Token-in-URL mitigation headers
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+
   // Rate limit
   const rl = checkRateLimit(`access:${ip(req)}`, 30);
   res.setHeader('X-RateLimit-Remaining', String(rl.remaining));
@@ -63,6 +77,7 @@ module.exports = async function handler(req, res) {
     const statusMessages = {
       'MENUNGGU_PEMBAYARAN': 'Pesanan Anda belum selesai dibayar.',
       'MENUNGGU_VERIFIKASI': 'Pesanan Anda sedang dalam proses verifikasi.',
+      'MENUNGGU_DELIVERY': 'Pesanan Anda sedang diproses.',
       'DITOLAK': 'Pesanan Anda ditolak.',
     };
     return res.status(403).json({
